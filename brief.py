@@ -24,7 +24,7 @@ RECIPIENT_NAME      = os.environ.get("RECIPIENT_NAME", "Michael")
 DRY_RUN             = os.environ.get("DRY_RUN", "0") == "1"
 
 RESEND_API_KEY      = os.environ.get("RESEND_API_KEY", "")
-EMAIL_FROM_RESEND   = "onboarding@resend.dev"
+EMAIL_FROM_RESEND = "Daily Brief <onboarding@resend.dev>"
 GMAIL_USER          = os.environ.get("GMAIL_USER", "")
 GMAIL_APP_PASSWORD  = os.environ.get("GMAIL_APP_PASSWORD", "")
 
