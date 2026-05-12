@@ -18,7 +18,7 @@ import requests
 # CONFIG & GLOBAL CONSTANTS
 # ---------------------------------------------------------------------------
 
-EMAIL_TO            = os.environ.get("EMAIL_TO", "vmgrosso02@yahoo.com")
+EMAIL_TO            = os.environ.get("EMAIL_TO", "vmgrosso02@gmail.com")
 RECIPIENT_NAME      = os.environ.get("RECIPIENT_NAME", "Michael")
 DRY_RUN             = os.environ.get("DRY_RUN", "0") == "1"
 
