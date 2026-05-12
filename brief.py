@@ -23,12 +23,12 @@ RECIPIENT_NAME      = os.environ.get("RECIPIENT_NAME", "Michael")
 DRY_RUN             = os.environ.get("DRY_RUN", "0") == "1"
 
 RESEND_API_KEY      = os.environ.get("RESEND_API_KEY", "")
-EMAIL_FROM_RESEND   = os.environ.get("EMAIL_FROM", "Daily Brief <onboarding@resend.dev>")
+# MUST be this address for Resend free tier unless you verified a domain
+EMAIL_FROM_RESEND   = "onboarding@resend.dev"
 GMAIL_USER          = os.environ.get("GMAIL_USER", "")
 GMAIL_APP_PASSWORD  = os.environ.get("GMAIL_APP_PASSWORD", "")
 
 TOP_N                   = 5
-# Lowered slightly for 2x/day frequency to prioritize newer stories
 RECENCY_HALF_LIFE_HOURS = 12 
 MAX_PER_TOPIC           = 2
 SUMMARY_MAX_CHARS       = 360
@@ -80,7 +80,7 @@ INTERESTS: dict[str, dict] = {
         "keywords": ["phase 3", "clinical trial", "fda", "pharma", "crispr", "neuroscience", "neuralink", "bci"],
     },
     "sports": {
-        "weight": 1.30, # High weight to ensure these surface
+        "weight": 1.40, 
         "keywords": ["christian grosso", "virginia lacrosse", "uva", "cavaliers", "celtics", "bruins", "red sox", "patriots", "georgia tech", "yellow jackets", "ncaa tournament", "lax"],
     },
 }
@@ -161,7 +161,6 @@ def pick_top(stories: Iterable[Story], n: int = TOP_N) -> list[Story]:
     per_topic: dict[str, int] = {}
     seen_titles: set[str] = set()
 
-    # Ensure at least one sports story if available
     sports = [s for s in ranked if s.topic == "sports"]
     if sports:
         picked.append(sports[0])
@@ -200,20 +199,20 @@ HTML_TEMPLATE = """<!doctype html>
 <body style="margin:0;padding:0;background:#faf8f5;color:#1c1c1e;font:16px/1.55 system-ui,sans-serif;">
 <div style="max-width:640px;margin:0 auto;padding:28px 20px 60px;">
   <div style="font-size:13px;text-transform:uppercase;color:#6e6e73;">{greeting}, {name}</div>
-  <h1 style="font-size:28px;margin:4px 0 0;font-weight:600;color:#1c1c1e;">Briefing — {date_human}</h1>
+  <h1 style="font-size:28px;margin:4px 0 0;font-weight:600;color:#1c1c1e;">{period} Briefing — {date_human}</h1>
   {articles}
 </div></body></html>"""
 
 def render(stories: list[Story], now: dt.datetime) -> str:
-    # Adjust for Waco (UTC -5)
-    local_hour = (now.hour - 5) % 24 
+    # Adjust for Miami (UTC -4)
+    local_hour = (now.hour - 4) % 24 
     
     if local_hour < 12:
-        greeting = "Good Morning"
+        greeting, period = "Good Morning", "Morning"
     elif local_hour < 17:
-        greeting = "Good Afternoon"
+        greeting, period = "Good Afternoon", "Afternoon"
     else:
-        greeting = "Good Evening"
+        greeting, period = "Good Evening", "Evening"
         
     arts = [ARTICLE_TEMPLATE.format(
         idx=i, 
@@ -225,7 +224,8 @@ def render(stories: list[Story], now: dt.datetime) -> str:
     ) for i, s in enumerate(stories, 1)]
     
     return HTML_TEMPLATE.format(
-        greeting=greeting, 
+        greeting=greeting,
+        period=period,
         name=RECIPIENT_NAME, 
         date_human=now.strftime("%A, %B %d, %Y"), 
         articles="\n".join(arts)
@@ -233,10 +233,24 @@ def render(stories: list[Story], now: dt.datetime) -> str:
 
 def send_email(subject: str, html_body: str) -> None:
     if RESEND_API_KEY:
-        r = requests.post("https://api.resend.com/emails", 
-                          headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"}, 
-                          data=json.dumps({"from": EMAIL_FROM_RESEND, "to": [EMAIL_TO], "subject": subject, "html": html_body}))
-        r.raise_for_status()
+        payload = {
+            "from": EMAIL_FROM_RESEND,
+            "to": [EMAIL_TO],
+            "subject": subject,
+            "html": html_body
+        }
+        r = requests.post(
+            "https://api.resend.com/emails", 
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}", 
+                "Content-Type": "application/json"
+            }, 
+            data=json.dumps(payload)
+        )
+        if r.status_code not in [200, 201]:
+            print(f"Resend Error: {r.status_code} - {r.text}")
+            r.raise_for_status()
+
     elif GMAIL_USER and GMAIL_APP_PASSWORD:
         msg = EmailMessage()
         msg["Subject"], msg["From"], msg["To"] = subject, GMAIL_USER, EMAIL_TO
@@ -252,10 +266,13 @@ def main() -> None:
     top = pick_top(stories, TOP_N)
     html_body = render(top, now)
     
+    # Subject line logic for Miami Time
+    local_hour = (now.hour - 4) % 24
+    period = "Morning" if local_hour < 12 else "Evening"
+    
     if not DRY_RUN:
-        subject = f"Morning Briefing — {now.strftime('%b %d')}" if ((now.hour - 5) % 24) < 12 else f"Evening Briefing — {now.strftime('%b %d')}"
-        send_email(subject, html_body)
-    print(f"Sent {len(top)} stories.")
+        send_email(f"{period} Briefing — {now.strftime('%b %d')}", html_body)
+    print(f"Sent {len(top)} stories for {period} briefing.")
 
 if __name__ == "__main__":
     main()
