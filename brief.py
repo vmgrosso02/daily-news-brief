@@ -54,101 +54,107 @@ GMAIL_USER          = os.environ.get("GMAIL_USER", "")
 GMAIL_APP_PASSWORD  = os.environ.get("GMAIL_APP_PASSWORD", "")
 
 
-# Quality-first sources. Paywalls + outrage farms excluded.
+# Quality-first sources.
 FEEDS: list[tuple[str, str, float]] = [
-
-    # ---------------------------
     # MARKETS / WORLD
-    # ---------------------------
-
-    ("Reuters World",           "https://feeds.reuters.com/Reuters/worldNews",                    1.00),
-    ("Reuters Business",        "https://feeds.reuters.com/reuters/businessNews",                 1.00),
-    ("Reuters Technology",      "https://feeds.reuters.com/reuters/technologyNews",               1.00),
-    ("Reuters Science",         "https://feeds.reuters.com/reuters/scienceNews",                  1.00),
-
-    ("AP Top News",             "https://apnews.com/index.rss",                                   0.98),
-    ("BBC Business",            "http://feeds.bbci.co.uk/news/business/rss.xml",                  0.95),
-    ("BBC Technology",          "http://feeds.bbci.co.uk/news/technology/rss.xml",                0.92),
-
-    ("CNBC Markets",            "https://www.cnbc.com/id/100003114/device/rss/rss.html",          0.90),
+    ("Reuters Business",        "https://feeds.reuters.com/reuters/businessNews",                 0.95),
+    ("MarketWatch Top",         "http://feeds.marketwatch.com/marketwatch/topstories/",           0.92),
+    ("Seeking Alpha",           "https://seekingalpha.com/market_news.rss",                       0.90),
+    ("AP Business",             "https://apnews.com/hub/business.rss",                            0.88),
     ("The Economist Finance",   "https://www.economist.com/finance-and-economics/rss.xml",         0.88),
 
-    ("Axios Markets",           "https://api.axios.com/feed/markets",                             0.85),
-    ("Semafor Business",        "https://www.semafor.com/feeds/business",                         0.82),
-
-    # ---------------------------
-    # AI / TECH
-    # ---------------------------
-
+    # AI / TECH / BIOTECH
     ("MIT Tech Review",         "https://www.technologyreview.com/feed/",                         0.90),
     ("Ars Technica",            "https://feeds.arstechnica.com/arstechnica/index",                0.88),
-    ("The Verge",               "https://www.theverge.com/rss/index.xml",                         0.82),
-
-    # ---------------------------
-    # BIOTECH / SCIENCE
-    # ---------------------------
-
     ("Nature",                  "https://www.nature.com/nature.rss",                              0.95),
-    ("Science Daily Neuro",     "https://www.sciencedaily.com/rss/mind_brain/neuroscience.xml",   0.88),
     ("STAT Biotech",            "https://www.statnews.com/feed/",                                 0.92),
 
-    # ---------------------------
-    # SPORTS (REVISED)
-    # ---------------------------
-
+    # SPORTS (Tailored for UVA, Boston, and GT)
+    ("NCAA Lacrosse",           "https://www.ncaa.com/news/lacrosse-men/d1/rss.xml",              1.00),
+    ("Inside Lacrosse",         "https://www.insidelacrosse.com/rss",                             0.95),
+    ("ESPN NBA",                "https://www.espn.com/espn/rss/nba/news",                         0.90),
     ("ESPN NFL",                "https://www.espn.com/espn/rss/nfl/news",                         0.85),
-    ("ESPN NBA",                "https://www.espn.com/espn/rss/nba/news",                         0.85),
-    ("ESPN NCAAF",              "https://www.espn.com/espn/rss/ncf/news",                         0.82),
-    ("ESPN NCAAM",              "https://www.espn.com/espn/rss/ncb/news",                         0.80),
-    
-    ("NCAA Lacrosse News",      "https://www.ncaa.com/news/lacrosse-men/d1/rss.xml",              0.82),
-    ("Inside Lacrosse",         "https://www.insidelacrosse.com/rss",                             0.80),
-    
-    ("Yahoo Sports NBA",        "https://sports.yahoo.com/nba/rss.xml",                           0.78),
-    ("Yahoo Sports NCAAF",      "https://sports.yahoo.com/ncaaf/rss.xml",                         0.78),
-    
-    ("CBS Sports College BB",   "https://www.cbssports.com/rss/headlines/college-basketball/",    0.76),
+    ("ESPN NHL",                "https://www.espn.com/nhl/rss/",                                  0.85),
+    ("Ramblin Wreck (GT)",      "https://ramblinwreck.com/feed/",                                 0.90),
     ("ESPN MLB",                "https://www.espn.com/espn/rss/mlb/news",                         0.75),
 ]
+
 INTERESTS: dict[str, dict] = {
     "finance_markets": {
         "weight": 1.00,
         "keywords": [
-            "fed", "fomc", "interest rate", "rate cut", "rate hike", "inflation",
-            "cpi", "ppi", "yield", "treasury", "bond", "s&p", "nasdaq", "dow",
-            "earnings", "guidance", "capex", "buyback", "ipo", "merger",
-            "powell", "warsh", "ecb", "boj", "oil", "opec", "crude",
-            "recession", "gdp", "unemployment", "jobs report", "payroll",
+            "fed", "fomc", "inflation", "cpi", "pce", "yield", "tokenization", "rwa", 
+            "real-world assets", "s&p 500", "nasdaq", "brent crude", "strait of hormuz",
+            "treasury", "interest rate", "earnings", "buyback", "ipo",
         ],
     },
     "ai_tech": {
         "weight": 1.00,
         "keywords": [
-            "ai", "artificial intelligence", "llm", "gpt", "claude", "gemini",
-            "nvidia", "amd", "tsmc", "semiconductor", "chip", "data center",
-            "openai", "anthropic", "microsoft", "google", "alphabet", "apple",
-            "meta", "amazon", "tesla", "robotics", "autonomous", "quantum",
-            "infrastructure", "gpu", "model", "training",
+            "ai agents", "autonomous agents", "agentic ai", "physical ai", "robotics",
+            "humanoid", "tesla bot", "figure ai", "semiconductor", "gpu", "nvda",
+            "openai", "claude", "gemini", "data center", "cloud 3.0",
         ],
     },
     "biotech_neuro": {
         "weight": 1.00,
         "keywords": [
-            "fda", "clinical trial", "phase 1", "phase 2", "phase 3",
-            "biotech", "pharma", "drug", "therapy", "vaccine", "gene therapy",
-            "stem cell", "crispr", "antibody", "oncology", "cancer",
-            "alzheimer", "parkinson", "neuroscience", "neural", "brain",
-            "cognitive", "dopamine", "synapse", "neurodegenerative",
+            "phase 3", "clinical trial", "fda approval", "topline results", "pharma",
+            "gene therapy", "crispr", "oncology", "neuroscience", "neuralink", 
+            "bci", "brain-computer", "alzheimer", "weight-loss drug",
         ],
     },
     "sports": {
-        "weight": 0.70,
+        "weight": 1.10,  # Boosted to ensure competitiveness
         "keywords": [
-            "mlb", "dodgers", "yankees", "world series", "playoffs",
-            "nba", "nfl", "super bowl", "champions league", "trade", "draft",
+            # Personal / UVA
+            "christian grosso", "virginia lacrosse", "uva", "cavaliers", "wahoos",
+            # Boston Teams
+            "celtics", "bruins", "red sox", "patriots", "pats", "foxboro",
+            # Georgia Tech
+            "georgia tech", "yellow jackets", "ramblin wreck", "gt football",
+            # General High Signal
+            "ncaa tournament", "playoffs", "final four", "lax", "faceoff", "crease",
         ],
     },
 }
+
+# ---------------------------------------------------------------------------
+# LOGIC UPDATE: One Sports story per batch
+# Replace your existing pick_top function with this:
+# ---------------------------------------------------------------------------
+
+def pick_top(stories: Iterable[Story], n: int = TOP_N) -> list[Story]:
+    ranked = sorted(stories, key=lambda s: s.total_score, reverse=True)
+    picked: list[Story] = []
+    per_topic: dict[str, int] = {}
+    seen_titles: set[str] = set()
+
+    # FIRST PASS: Grab the highest scoring Sports story regardless of rank
+    sports_stories = [s for s in ranked if s.topic == "sports" and s.total_score > 0]
+    if sports_stories:
+        s = sports_stories[0]
+        picked.append(s)
+        per_topic[s.topic] = 1
+        seen_titles.add(s.title.lower())
+
+    # SECOND PASS: Fill the rest normally
+    for s in ranked:
+        if len(picked) >= n:
+            break
+        if s.total_score <= 0:
+            continue
+        key = s.title.lower()
+        if key in seen_titles:
+            continue
+        if per_topic.get(s.topic, 0) >= MAX_PER_TOPIC:
+            continue
+        
+        picked.append(s)
+        per_topic[s.topic] = per_topic.get(s.topic, 0) + 1
+        seen_titles.add(key)
+        
+    return sorted(picked, key=lambda x: x.total_score, reverse=True)
 
 PENALTY_KEYWORDS = [
     "kardashian", "tiktok drama", "outrage", "slams", "rips", "destroys",
