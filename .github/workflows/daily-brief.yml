@@ -1,41 +1,31 @@
-name: Daily Morning Brief
+name: Daily News Brief
 
 on:
   schedule:
-    # 13:00 UTC = 6:00 AM Pacific Daylight Time (Mar–Nov)
-    #            = 5:00 AM Pacific Standard Time (Nov–Mar)
-    # Adjust the hour below to shift local time.
-    - cron: "0 10 * * *"
-  workflow_dispatch:    # adds a "Run workflow" button for on-demand testing
+    # 10:00 UTC is 6:00 AM ET (Miami)
+    - cron: '0 10 * * *'
+    # 22:00 UTC is 6:00 PM ET (Miami)
+    - cron: '0 22 * * *'
+  workflow_dispatch:
 
 jobs:
-  send-brief:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - name: Checkout repo
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
-          cache: "pip"
+          python-version: '3.9'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install feedparser requests
 
-      - name: Generate + send brief
+      - name: Run script
         env:
-          # Required
-          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-          RECIPIENT_NAME:     ${{ secrets.RECIPIENT_NAME }}
-
-          # Option A: Resend (preferred)
-          RESEND_API_KEY:     ${{ secrets.RESEND_API_KEY }}
-          EMAIL_FROM:         ${{ secrets.EMAIL_FROM }}
-
-          # Option B: Gmail SMTP (fallback — set if you skipped Resend)
-          GMAIL_USER:         ${{ secrets.GMAIL_USER }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_TO: "vmgrosso02@yahoo.com"
+          RECIPIENT_NAME: "Michael"
         run: python brief.py
