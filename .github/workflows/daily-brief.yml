@@ -26,6 +26,6 @@ jobs:
       - name: Run script
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          EMAIL_TO: "vmgrosso02@yahoo.com"
+          EMAIL_TO: "vmgrosso02@gmail.com"
           RECIPIENT_NAME: "Michael"
         run: python brief.py
