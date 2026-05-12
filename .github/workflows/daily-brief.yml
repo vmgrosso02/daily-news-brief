@@ -1,0 +1,41 @@
+name: Daily Morning Brief
+
+on:
+  schedule:
+    # 13:00 UTC = 6:00 AM Pacific Daylight Time (Mar–Nov)
+    #            = 5:00 AM Pacific Standard Time (Nov–Mar)
+    # Adjust the hour below to shift local time.
+    - cron: "0 13 * * *"
+  workflow_dispatch:    # adds a "Run workflow" button for on-demand testing
+
+jobs:
+  send-brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate + send brief
+        env:
+          # Required
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+          RECIPIENT_NAME:     ${{ secrets.RECIPIENT_NAME }}
+
+          # Option A: Resend (preferred)
+          RESEND_API_KEY:     ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM:         ${{ secrets.EMAIL_FROM }}
+
+          # Option B: Gmail SMTP (fallback — set if you skipped Resend)
+          GMAIL_USER:         ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: python brief.py
