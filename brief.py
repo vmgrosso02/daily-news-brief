@@ -54,24 +54,62 @@ GMAIL_USER          = os.environ.get("GMAIL_USER", "")
 GMAIL_APP_PASSWORD  = os.environ.get("GMAIL_APP_PASSWORD", "")
 
 
-# Quality-first sources. Outrage farms intentionally excluded.
+# Quality-first sources. Paywalls + outrage farms excluded.
 FEEDS: list[tuple[str, str, float]] = [
+
+    # ---------------------------
+    # MARKETS / WORLD
+    # ---------------------------
+
+    ("Reuters World",           "https://feeds.reuters.com/Reuters/worldNews",                    1.00),
     ("Reuters Business",        "https://feeds.reuters.com/reuters/businessNews",                 1.00),
     ("Reuters Technology",      "https://feeds.reuters.com/reuters/technologyNews",               1.00),
     ("Reuters Science",         "https://feeds.reuters.com/reuters/scienceNews",                  1.00),
-    ("AP Top News",             "https://apnews.com/index.rss",                                   1.00),
-    ("BBC Business",            "http://feeds.bbci.co.uk/news/business/rss.xml",                  0.95),
-    ("FT Markets",              "https://www.ft.com/markets?format=rss",                          0.95),
-    ("WSJ Markets",             "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",                  0.95),
-    ("Bloomberg Markets",       "https://feeds.bloomberg.com/markets/news.rss",                   0.95),
-    ("The Economist Finance",   "https://www.economist.com/finance-and-economics/rss.xml",        0.90),
-    ("Nature",                  "https://www.nature.com/nature.rss",                              0.95),
-    ("Science Daily Neuro",     "https://www.sciencedaily.com/rss/mind_brain/neuroscience.xml",   0.85),
-    ("STAT Biotech",            "https://www.statnews.com/feed/",                                 0.90),
-    ("MIT Tech Review",         "https://www.technologyreview.com/feed/",                         0.85),
-    ("ESPN MLB",                "https://www.espn.com/espn/rss/mlb/news",                         0.80),
-]
 
+    ("AP Top News",             "https://apnews.com/index.rss",                                   0.98),
+    ("BBC Business",            "http://feeds.bbci.co.uk/news/business/rss.xml",                  0.95),
+    ("BBC Technology",          "http://feeds.bbci.co.uk/news/technology/rss.xml",                0.92),
+
+    ("CNBC Markets",            "https://www.cnbc.com/id/100003114/device/rss/rss.html",          0.90),
+    ("The Economist Finance",   "https://www.economist.com/finance-and-economics/rss.xml",         0.88),
+
+    ("Axios Markets",           "https://api.axios.com/feed/markets",                             0.85),
+    ("Semafor Business",        "https://www.semafor.com/feeds/business",                         0.82),
+
+    # ---------------------------
+    # AI / TECH
+    # ---------------------------
+
+    ("MIT Tech Review",         "https://www.technologyreview.com/feed/",                         0.90),
+    ("Ars Technica",            "https://feeds.arstechnica.com/arstechnica/index",                0.88),
+    ("The Verge",               "https://www.theverge.com/rss/index.xml",                         0.82),
+
+    # ---------------------------
+    # BIOTECH / SCIENCE
+    # ---------------------------
+
+    ("Nature",                  "https://www.nature.com/nature.rss",                              0.95),
+    ("Science Daily Neuro",     "https://www.sciencedaily.com/rss/mind_brain/neuroscience.xml",   0.88),
+    ("STAT Biotech",            "https://www.statnews.com/feed/",                                 0.92),
+
+    # ---------------------------
+    # SPORTS (REVISED)
+    # ---------------------------
+
+    ("ESPN NFL",                "https://www.espn.com/espn/rss/nfl/news",                         0.85),
+    ("ESPN NBA",                "https://www.espn.com/espn/rss/nba/news",                         0.85),
+    ("ESPN NCAAF",              "https://www.espn.com/espn/rss/ncf/news",                         0.82),
+    ("ESPN NCAAM",              "https://www.espn.com/espn/rss/ncb/news",                         0.80),
+    
+    ("NCAA Lacrosse News",      "https://www.ncaa.com/news/lacrosse-men/d1/rss.xml",              0.82),
+    ("Inside Lacrosse",         "https://www.insidelacrosse.com/rss",                             0.80),
+    
+    ("Yahoo Sports NBA",        "https://sports.yahoo.com/nba/rss.xml",                           0.78),
+    ("Yahoo Sports NCAAF",      "https://sports.yahoo.com/ncaaf/rss.xml",                         0.78),
+    
+    ("CBS Sports College BB",   "https://www.cbssports.com/rss/headlines/college-basketball/",    0.76),
+    ("ESPN MLB",                "https://www.espn.com/espn/rss/mlb/news",                         0.75),
+]
 INTERESTS: dict[str, dict] = {
     "finance_markets": {
         "weight": 1.00,
