@@ -18,7 +18,6 @@ import requests
 # CONFIG & GLOBAL CONSTANTS
 # ---------------------------------------------------------------------------
 
-# FIX: This MUST match your Resend login email (vmgrosso02@gmail.com)
 EMAIL_TO            = os.environ.get("EMAIL_TO", "vmgrosso02@gmail.com")
 RECIPIENT_NAME      = os.environ.get("RECIPIENT_NAME", "Michael")
 DRY_RUN             = os.environ.get("DRY_RUN", "0") == "1"
@@ -127,31 +126,45 @@ def score_story(story: Story, now: dt.datetime) -> None:
         score = cfg["weight"] * min(hits, 3) / 3.0
         if score > best_score:
             best_score, best_topic = score, topic
+    
     story.topic, story.topic_score = best_topic, best_score
+    
+    # AGGRESSIVE DEDUPLICATION: Kill stories older than 24 hours
     age_h = max((now - story.published).total_seconds() / 3600.0, 0)
-    story.recency_score = 0.5 ** (age_h / RECENCY_HALF_LIFE_HOURS)
+    if age_h > 24:
+        story.recency_score = 0.001 
+    else:
+        story.recency_score = 0.5 ** (age_h / RECENCY_HALF_LIFE_HOURS)
+        
     story.penalty = sum(1.5 for bad in PENALTY_KEYWORDS if bad in text)
 
 def pick_top(stories: Iterable[Story], n: int = TOP_N) -> list[Story]:
     ranked = sorted(stories, key=lambda s: s.total_score, reverse=True)
-    picked: list[Story] = []
+    
+    picked_general: list[Story] = []
+    picked_sports: list[Story] = []
     per_topic: dict[str, int] = {}
     seen_titles: set[str] = set()
 
-    sports = [s for s in ranked if s.topic == "sports"]
-    if sports:
-        picked.append(sports[0])
-        per_topic["sports"] = 1
-        seen_titles.add(sports[0].title.lower())
+    # 1. Grab the best Sports story for the "closer" slot
+    sports_candidates = [s for s in ranked if s.topic == "sports" and s.total_score > 0]
+    if sports_candidates:
+        picked_sports.append(sports_candidates[0])
+        seen_titles.add(sports_candidates[0].title.lower())
 
+    # 2. Fill general slots (n - 1 because we reserved one for sports)
     for s in ranked:
-        if len(picked) >= n: break
+        if len(picked_general) >= (n - 1): break
+        if s.topic == "sports": continue
         if s.title.lower() in seen_titles: continue
         if per_topic.get(s.topic, 0) >= MAX_PER_TOPIC: continue
-        picked.append(s)
+        
+        picked_general.append(s)
         per_topic[s.topic] = per_topic.get(s.topic, 0) + 1
         seen_titles.add(s.title.lower())
-    return picked
+
+    # 3. Combine: General news first, Sports story ALWAYS last
+    return picked_general + picked_sports
 
 ARTICLE_TEMPLATE = """
 <div style="background:#ffffff;border:1px solid #e5e3df;border-radius:14px;padding:20px 22px;margin:14px 0;">
