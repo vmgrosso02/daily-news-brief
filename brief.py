@@ -52,17 +52,18 @@ FEEDS: list[tuple[str, str, float]] = [
     ("Nature",                  "https://www.nature.com/nature.rss",                              0.95),
     ("STAT Biotech",            "https://www.statnews.com/feed/",                                 0.92),
     ("NCAA Lacrosse",           "https://www.ncaa.com/news/lacrosse-men/d1/rss.xml",              1.00),
-    ("Inside Lacrosse",         "https://www.insidelacrosse.com/rss",                             0.95),
+    ("Inside Lacrosse",         "https://www.insidelacrosse.com/rss",                             1.00),
     ("ESPN NBA",                "https://www.espn.com/espn/rss/nba/news",                         0.90),
     ("ESPN NFL",                "https://www.espn.com/espn/rss/nfl/news",                         0.85),
-    ("Ramblin Wreck (GT)",      "https://ramblinwreck.com/feed/",                                 0.90),
+    ("Ramblin Wreck (GT)",      "https://ramblinwreck.com/feed/",                                 0.95),
 ]
 
+# REFINED KEYWORDS: Focuses on specific sport terms to avoid science crossovers
 INTERESTS: dict[str, dict] = {
-    "finance_markets": {"weight": 1.00, "keywords": ["fed", "inflation", "yield", "s&p 500", "nasdaq"]},
-    "ai_tech": {"weight": 1.00, "keywords": ["ai agents", "robotics", "nvda", "openai", "claude", "gemini"]},
-    "biotech_neuro": {"weight": 1.00, "keywords": ["fda", "pharma", "crispr", "neuroscience", "neuralink", "bci"]},
-    "sports": {"weight": 1.40, "keywords": ["lacrosse", "uva", "cavaliers", "celtics", "bruins", "red sox", "patriots", "georgia tech", "yellow jackets", "lax"]},
+    "finance_markets": {"weight": 1.0, "keywords": ["fed", "inflation", "yield", "s&p 500", "nasdaq", "dow jones"]},
+    "ai_tech": {"weight": 1.0, "keywords": ["ai agents", "robotics", "nvda", "openai", "claude", "gemini", "gpu"]},
+    "biotech_neuro": {"weight": 1.0, "keywords": ["fda", "pharma", "crispr", "neuroscience", "neuralink", "clinical trial"]},
+    "sports": {"weight": 2.0, "keywords": ["lacrosse", "score", "game", "quarterback", "nba", "nfl", "gt athletics", "yellow jackets", "lax", "ncaa", "bracket"]},
 }
 
 @dataclass
@@ -121,22 +122,25 @@ def fetch_stories() -> list[Story]:
 def score_story(story: Story, now: dt.datetime) -> None:
     text = f"{story.title} {story.summary}".lower()
     best_topic, best_score = "general", 0.01 
+    
     for topic, cfg in INTERESTS.items():
         hits = sum(1 for kw in cfg["keywords"] if kw in text)
-        score = cfg["weight"] * min(hits, 3) / 3.0
-        if score > best_score:
-            best_score, best_topic = score, topic
+        if hits > 0:
+            # Sports gets a boost but requires at least one hard keyword hit
+            score = (cfg["weight"] * hits) 
+            if score > best_score:
+                best_score, best_topic = score, topic
     
     story.topic, story.topic_score = best_topic, best_score
     
-    # AGGRESSIVE DEDUPLICATION: Kill stories older than 24 hours
+    # 24-HOUR FILTER: Slashes score for anything from yesterday
     age_h = max((now - story.published).total_seconds() / 3600.0, 0)
-    if age_h > 24:
-        story.recency_score = 0.001 
+    if age_h > 22: # Slightly under 24 to ensure fresh content
+        story.recency_score = 0.01 
     else:
         story.recency_score = 0.5 ** (age_h / RECENCY_HALF_LIFE_HOURS)
         
-    story.penalty = sum(1.5 for bad in PENALTY_KEYWORDS if bad in text)
+    story.penalty = sum(2.0 for bad in PENALTY_KEYWORDS if bad in text)
 
 def pick_top(stories: Iterable[Story], n: int = TOP_N) -> list[Story]:
     ranked = sorted(stories, key=lambda s: s.total_score, reverse=True)
@@ -144,26 +148,33 @@ def pick_top(stories: Iterable[Story], n: int = TOP_N) -> list[Story]:
     picked_general: list[Story] = []
     picked_sports: list[Story] = []
     per_topic: dict[str, int] = {}
-    seen_titles: set[str] = set()
+    seen_links: set[str] = set()
 
-    # 1. Grab the best Sports story for the "closer" slot
-    sports_candidates = [s for s in ranked if s.topic == "sports" and s.total_score > 0]
+    # 1. Identify valid Sports stories (must be from a sports source or have high sport score)
+    sports_sources = ["NCAA Lacrosse", "Inside Lacrosse", "ESPN NBA", "ESPN NFL", "Ramblin Wreck (GT)"]
+    sports_candidates = [
+        s for s in ranked 
+        if (s.topic == "sports" or s.source in sports_sources) 
+        and s.total_score > 0
+    ]
+    
     if sports_candidates:
-        picked_sports.append(sports_candidates[0])
-        seen_titles.add(sports_candidates[0].title.lower())
+        top_sport = sports_candidates[0]
+        picked_sports.append(top_sport)
+        seen_links.add(top_sport.link)
 
-    # 2. Fill general slots (n - 1 because we reserved one for sports)
+    # 2. Fill the rest of the slots
     for s in ranked:
         if len(picked_general) >= (n - 1): break
-        if s.topic == "sports": continue
-        if s.title.lower() in seen_titles: continue
+        if s.link in seen_links: continue
+        if s.topic == "sports" or s.source in sports_sources: continue
         if per_topic.get(s.topic, 0) >= MAX_PER_TOPIC: continue
         
         picked_general.append(s)
         per_topic[s.topic] = per_topic.get(s.topic, 0) + 1
-        seen_titles.add(s.title.lower())
+        seen_links.add(s.link)
 
-    # 3. Combine: General news first, Sports story ALWAYS last
+    # 3. Combine: General News [1-4], Sports [5]
     return picked_general + picked_sports
 
 ARTICLE_TEMPLATE = """
@@ -188,6 +199,7 @@ HTML_TEMPLATE = """<!doctype html>
 </div></body></html>"""
 
 def render(stories: list[Story], now: dt.datetime) -> str:
+    # Adjusting for EST (UTC-4)
     local_hour = (now.hour - 4) % 24 
     if local_hour < 12: greeting, period = "Good Morning", "Morning"
     elif local_hour < 17: greeting, period = "Good Afternoon", "Afternoon"
