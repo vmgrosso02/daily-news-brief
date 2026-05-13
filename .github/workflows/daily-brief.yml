@@ -2,10 +2,10 @@ name: Daily News Brief
 
 on:
   schedule:
-    # 10:00 UTC is 6:00 AM ET (Miami)
-    - cron: '0 10 * * *'
-    # 22:00 UTC is 6:00 PM ET (Miami)
-    - cron: '0 22 * * *'
+    # 09:45 UTC is 5:45 AM ET (Miami) - Aiming for early delivery
+    - cron: '45 9 * * *'
+    # 21:45 UTC is 5:45 PM ET (Miami)
+    - cron: '45 21 * * *'
   workflow_dispatch:
 
 jobs:
