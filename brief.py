@@ -24,8 +24,7 @@ RECIPIENT_NAME      = os.environ.get("RECIPIENT_NAME", "Michael")
 DRY_RUN             = os.environ.get("DRY_RUN", "0") == "1"
 
 RESEND_API_KEY      = os.environ.get("RESEND_API_KEY", "")
-EMAIL_FROM_RESEND = "Daily Brief <onboarding@resend.dev>"
-GMAIL_USER          = os.environ.get("GMAIL_USER", "")
+EMAIL_FROM_RESEND = "onboarding@resend.dev"GMAIL_USER          = os.environ.get("GMAIL_USER", "")
 GMAIL_APP_PASSWORD  = os.environ.get("GMAIL_APP_PASSWORD", "")
 
 TOP_N                   = 5
@@ -190,20 +189,21 @@ def render(stories: list[Story], now: dt.datetime) -> str:
 
 def send_email(subject: str, html_body: str) -> None:
     if RESEND_API_KEY:
-        payload = {"from": EMAIL_FROM_RESEND, "to": [EMAIL_TO], "subject": subject, "html": html_body}
-        r = requests.post("https://api.resend.com/emails", 
-                          headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"}, 
-                          data=json.dumps(payload))
-        if r.status_code not in [200, 201]:
-            print(f"Resend Error: {r.status_code} - {r.text}")
-            r.raise_for_status()
-    elif GMAIL_USER and GMAIL_APP_PASSWORD:
-        msg = EmailMessage()
-        msg["Subject"], msg["From"], msg["To"] = subject, GMAIL_USER, EMAIL_TO
-        msg.add_alternative(html_body, subtype="html")
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ssl.create_default_context()) as s:
-            s.login(GMAIL_USER, GMAIL_APP_PASSWORD)
-            s.send_message(msg)
+        payload = {
+            "from": "Daily Brief <onboarding@resend.dev>", # Format it exactly like this
+            "to": [EMAIL_TO], 
+            "subject": subject, 
+            "html": html_body
+        }
+        r = requests.post(
+            "https://api.resend.com/emails", 
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}", 
+                "Content-Type": "application/json"
+            }, 
+            data=json.dumps(payload)
+        )
+     
 
 def main() -> None:
     now = dt.datetime.utcnow()
