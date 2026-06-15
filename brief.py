@@ -12,7 +12,7 @@ from typing import Iterable
 # ---------------------------------------------------------------------------
 # CONFIG & SOURCE LOCKS
 # ---------------------------------------------------------------------------
-EMAIL_TO            = os.environ.get("EMAIL_TO", "vmgrosso02@gmail.com")
+EMAIL_TO            = os.environ.get("EMAIL_TO")
 RECIPIENT_NAME      = os.environ.get("RECIPIENT_NAME", "Michael")
 RESEND_API_KEY      = os.environ.get("RESEND_API_KEY", "")
 EMAIL_FROM_RESEND   = "Daily Brief <onboarding@resend.dev>"
@@ -35,18 +35,18 @@ TOPIC_LABELS = {
 }
 
 FEEDS = [
-    ("Reuters Business",        "https://feeds.reuters.com/reuters/businessNews",                 0.95),
+    ("Reuters Business",        "https://feeds.reuters.com/reuters/businessNews",                  0.95),
     ("MarketWatch Top",         "http://feeds.marketwatch.com/marketwatch/topstories/",           0.92),
     ("The Economist Finance",   "https://www.economist.com/finance-and-economics/rss.xml",         0.88),
-    ("MIT Tech Review",         "https://www.technologyreview.com/feed/",                         0.90),
-    ("Nature",                  "https://www.nature.com/nature.rss",                              0.95),
-    ("STAT Biotech",            "https://www.statnews.com/feed/",                                 0.92),
-    ("NCAA Lacrosse",           "https://www.ncaa.com/news/lacrosse-men/d1/rss.xml",              1.00),
-    ("Inside Lacrosse",         "https://www.insidelacrosse.com/rss",                             1.00),
-    ("ESPN NBA",                "https://www.espn.com/espn/rss/nba/news",                         0.90),
-    ("ESPN NFL",                "https://www.espn.com/espn/rss/nfl/news",                         0.85),
-    ("Ramblin Wreck (GT)",      "https://ramblinwreck.com/feed/",                                 0.95),
-    ("Miami Herald Sports",     "https://www.miamiherald.com/sports/index.rss",                   0.90),
+    ("MIT Tech Review",         "https://www.technologyreview.com/feed/",                          0.90),
+    ("Nature",                  "https://www.nature.com/nature.rss",                               0.95),
+    ("STAT Biotech",            "https://www.statnews.com/feed/",                                  0.92),
+    ("NCAA Lacrosse",           "https://www.ncaa.com/news/lacrosse-men/d1/rss.xml",               1.00),
+    ("Inside Lacrosse",         "https://www.insidelacrosse.com/rss",                              1.00),
+    ("ESPN NBA",                "https://www.espn.com/espn/rss/nba/news",                          0.90),
+    ("ESPN NFL",                "https://www.espn.com/espn/rss/nfl/news",                          0.85),
+    ("Ramblin Wreck (GT)",      "https://ramblinwreck.com/feed/",                                  0.95),
+    ("Miami Herald Sports",     "https://www.miamiherald.com/sports/index.rss",                    0.90),
 ]
 
 INTERESTS = {
@@ -162,7 +162,7 @@ def render_and_send(stories: list[Story]):
         {arts_html}
     </body></html>"""
 
-    if RESEND_API_KEY:
+    if RESEND_API_KEY and EMAIL_TO:
         requests.post("https://api.resend.com/emails", 
             headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
             data=json.dumps({"from": EMAIL_FROM_RESEND, "to": [EMAIL_TO], "subject": f"{period} Briefing", "html": email_html}))
