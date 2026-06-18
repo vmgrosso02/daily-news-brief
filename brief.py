@@ -134,13 +134,10 @@ def _clean(text: str) -> str:
 
 def fetch_stories() -> list[Story]:
     stories = []
-    # Using a modern user agent string keeps standard firewalls from dropping the request
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     
     for name, url, weight in FEEDS:
         try:
-            # SCALING UPGRADE: Raw requests engine with a 4-second timeout limit.
-            # This protects the GitHub Action routine if any single free source is down or slow.
             resp = requests.get(url, headers=headers, timeout=4)
             if resp.status_code != 200:
                 continue
@@ -198,11 +195,11 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
         if s.source in SPORTS_SOURCES and s.link not in seen:
             picked_sports.append(s)
             seen.add(s.link)
-            break # Only need one primary sports story
+            break 
     
     # 2. Fill the rest with non-sports news
     per_topic = {}
-    per_source = {}  # Track how many times a source is used
+    per_source = {}  
 
     for s in ranked:
         if len(picked_general) >= (TOP_N - 1): break
@@ -219,9 +216,15 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
 
 def render_and_send(stories: list[Story]):
     now = dt.datetime.utcnow()
-    # Miami Time Adjustment (UTC-4)
-    local_hour = (now.hour - 4) % 24
+    
+    # Offset UTC time to match Miami Time (UTC - 4 hours) 
+    # This guarantees the day of the week matches your actual morning calendar date
+    miami_time = now - dt.timedelta(hours=4)
+    local_hour = miami_time.hour
     period = "Morning" if local_hour < 12 else "Evening"
+    
+    # Formats heading to display explicitly as: "Thursday, June 18"
+    date_str = miami_time.strftime('%A, %B %d')
     
     # Simple HTML assembly
     arts_html = ""
@@ -236,7 +239,7 @@ def render_and_send(stories: list[Story]):
         </div>"""
 
     email_html = f"""<html><body style="font-family:sans-serif; max-width:600px; margin:auto;">
-        <h2>{period} Briefing — {now.strftime('%B %d')}</h2>
+        <h2>Your {period} Briefing — {date_str}</h2>
         <p>Good {period}, {RECIPIENT_NAME}. Here is your news.</p>
         {arts_html}
     </body></html>"""
@@ -244,7 +247,7 @@ def render_and_send(stories: list[Story]):
     if RESEND_API_KEY and EMAIL_TO:
         requests.post("https://api.resend.com/emails", 
             headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-            data=json.dumps({"from": EMAIL_FROM_RESEND, "to": [EMAIL_TO], "subject": f"{period} Briefing", "html": email_html}))
+            data=json.dumps({"from": EMAIL_FROM_RESEND, "to": [EMAIL_TO], "subject": f"Your {period} Briefing — {date_str}", "html": email_html}))
 
 if __name__ == "__main__":
     all_stories = fetch_stories()
