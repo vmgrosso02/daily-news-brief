@@ -32,7 +32,8 @@ if GEMINI_API_KEY and GEMINI_API_KEY.strip():
 TOP_N = 5
 MAX_PER_TOPIC = 2
 MAX_PER_SOURCE = 1      # Strict source diversity limit
-MAX_AGE_HOURS = 24      # Hard age cutoff to guarantee fresh daily insights
+MAX_AGE_HOURS = 24      # Hard age cutoff for regular news
+SPORTS_AGE_HOURS = 48    # Extended window for sports to protect weekend gaps
 
 SPORTS_SOURCES = [
     "NCAA Lacrosse", "Inside Lacrosse", "ESPN NBA", "ESPN NFL", 
@@ -110,11 +111,11 @@ INTERESTS = {
         ]
     },
     "sports": {
-        "weight": 3.0, 
+        "weight": 4.0, 
         "keywords": [
             "lacrosse", "lax", "ncaa", "quarterback", "nba", "nfl", "yellow jackets", "touchdown", 
             "playoffs", "espn", "championship", "draft", "super bowl", "finals", "bracket", 
-            "completions", "touchdowns", "halftime", "mvp", "gridiron"
+            "completions", "touchdowns", "halftime", "mvp", "gridiron", "sports", "game", "team", "coach"
         ]
     },
 }
@@ -144,8 +145,7 @@ def enrich_story_with_ai(title: str, summary: str) -> str:
     if not ai_client:
         return summary if summary else "No description available."
     
-    # If a source summary is completely empty or just duplicates the title, force a baseline context string
-    text_to_analyze = summary if (summary.strip() and summary.strip().lower() != title.strip().lower()) else "Extract and generate significance purely from the headline context."
+    text_to_analyze = summary if (summary.strip() and summary.strip().lower() != title.strip().lower()) else "Extract context and generate critical takeaway from headline."
     try:
         prompt = (
             f"Write a concise 1-2 sentence summary explaining the core significance of this news. "
@@ -157,7 +157,7 @@ def enrich_story_with_ai(title: str, summary: str) -> str:
         response = ai_client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         if response.text:
             return response.text.strip()
-        return summary if summary else "No summary details available."
+        return summary if summary else "No clear summary notes generated."
     except Exception as e:
         print(f"--- GEMINI API HANDSHAKE ERROR --- Detail: {e}")
         return summary if summary.strip() else "No description available."
@@ -175,7 +175,11 @@ def fetch_stories() -> list[Story]:
             parsed = feedparser.parse(resp.content)
             for entry in parsed.entries[:15]:
                 dt_obj = dt.datetime(*(entry.get("published_parsed") or entry.get("updated_parsed") or dt.datetime.utcnow().timetuple())[:6])
-                if (dt.datetime.utcnow() - dt_obj).total_seconds() / 3600.0 > MAX_AGE_HOURS:
+                
+                # Check aging window based on feed type
+                age_h = (dt.datetime.utcnow() - dt_obj).total_seconds() / 3600.0
+                allowed_age = SPORTS_AGE_HOURS if name in SPORTS_SOURCES else MAX_AGE_HOURS
+                if age_h > allowed_age:
                     continue
 
                 raw_summary = entry.get("summary") or entry.get("description") or ""
@@ -222,7 +226,7 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
             seen.add(s.link)
             break 
     
-    # 2. Fill the rest based on your strict source diversity limits
+    # 2. General constraints allocation
     per_topic = {}
     per_source = {}  
 
@@ -239,28 +243,32 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
         per_source[s.source] = per_source.get(s.source, 0) + 1  
         seen.add(s.link)
 
+    # Fallback to absolute best if strict filtering left us completely empty-handed
+    if not picked_general and not picked_sports:
+        print("CRITICAL FALLBACK: Loose fallback constraints engaged.")
+        for s in ranked[:TOP_N]:
+            s.summary = enrich_story_with_ai(s.title, s.summary)
+            picked_general.append(s)
+
     return picked_general + picked_sports
 
-def render_and_send(stories: list[Story], debug_mode=False, debug_msg=""):
+def render_and_send(stories: list[Story]):
     now = dt.datetime.utcnow()
     miami_time = now - dt.timedelta(hours=4)
     local_hour = miami_time.hour
     period = "Morning" if local_hour < 12 else "Evening"
     date_str = miami_time.strftime('%A, %B %d')
     
-    if debug_mode:
-        email_html = f"<html><body><h2>Briefing Error Diagnostic</h2><p>{debug_msg}</p></body></html>"
-    else:
-        arts_html = ""
-        for i, s in enumerate(stories, 1):
-            label = TOPIC_LABELS.get(s.topic, "Briefing")
-            arts_html += f"""
-            <div style="border-bottom:1px solid #eee; padding:18px 0;">
-                <small style="color:#666; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">{i:02d} | {label}</small>
-                <h3 style="margin:6px 0 8px 0; font-size:18px; line-height:1.4; color:#111;">{s.title}</h3>
-                <p style="font-size:14px; line-height:1.5; color:#333; margin:0 0 8px 0;">{s.summary}</p>
-                <a href="{s.link}" style="color:#007bff; font-size:13px; text-decoration:none; font-weight:500;">Read Source: {s.source} →</a>
-            </div>"""
+    arts_html = ""
+    for i, s in enumerate(stories, 1):
+        label = TOPIC_LABELS.get(s.topic, "Briefing")
+        arts_html += f"""
+        <div style="border-bottom:1px solid #eee; padding:18px 0;">
+            <small style="color:#666; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">{i:02d} | {label}</small>
+            <h3 style="margin:6px 0 8px 0; font-size:18px; line-height:1.4; color:#111;">{s.title}</h3>
+            <p style="font-size:14px; line-height:1.5; color:#333; margin:0 0 8px 0;">{s.summary}</p>
+            <a href="{s.link}" style="color:#007bff; font-size:13px; text-decoration:none; font-weight:500;">Read Source: {s.source} →</a>
+        </div>"""
 
     email_html = f"""
     <html>
@@ -281,7 +289,7 @@ def render_and_send(stories: list[Story], debug_mode=False, debug_msg=""):
     </html>"""
 
     msg = EmailMessage()
-    msg['Subject'] = f"Your {period} Briefing — {date_str}" if not debug_mode else "Daily Brief Alert: No Stories Found"
+    msg['Subject'] = f"Your {period} Briefing — {date_str}"
     msg['From'] = f"Daily Brief <{GMAIL_USER}>"
     msg['To'] = EMAIL_TO
     msg.add_alternative(email_html, subtype='html')
@@ -291,18 +299,16 @@ def render_and_send(stories: list[Story], debug_mode=False, debug_msg=""):
         smtp.send_message(msg)
 
 if __name__ == "__main__":
-    # Diagnostic checking logs
     if not os.environ.get("GEMINI_API_KEY"):
         print("ENVIRONMENT CRITICAL: GEMINI_API_KEY variable was not found.")
     else:
         print(f"ENVIRONMENT CHECK: GEMINI_API_KEY discovered. Character length: {len(os.environ.get('GEMINI_API_KEY'))}")
 
     all_stories = fetch_stories()
+    print(f"Total raw stories fetched: {len(all_stories)}")
+    
     for s in all_stories: score_story(s)
     top_selection = pick_top(all_stories)
     
-    if top_selection:
-        render_and_send(top_selection)
-    else:
-        err_msg = f"Fetched total of {len(all_stories)} raw stories, but 0 cleared constraints."
-        render_and_send([], debug_mode=True, debug_msg=err_msg)
+    print(f"Final stories selected for email production: {len(top_selection)}")
+    render_and_send(top_selection)
