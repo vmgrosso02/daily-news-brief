@@ -19,10 +19,13 @@ EMAIL_TO            = os.environ.get("EMAIL_TO")
 RECIPIENT_NAME      = os.environ.get("RECIPIENT_NAME", "Michael")
 GMAIL_USER          = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD  = os.environ.get("GMAIL_APP_PASSWORD")
-GEMINI_API_KEY      = os.environ.get("GEMINI_API_KEY")
 
-# Initialize Gemini Client safely
-ai_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+# Let the client read GEMINI_API_KEY automatically from the environment variables
+try:
+    ai_client = genai.Client() if os.environ.get("GEMINI_API_KEY") else None
+except Exception as e:
+    print(f"Failed to initialize GenAI Client: {e}")
+    ai_client = None
 
 TOP_N = 5
 MAX_PER_TOPIC = 2
@@ -148,7 +151,7 @@ def enrich_story_with_ai(title: str, summary: str) -> str:
             f"Headline: {title}\n"
             f"Details: {text_to_analyze}"
         )
-        response = ai_client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
+        response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
         if response.text:
             return response.text.strip()
         return summary if summary else "No summary details provided by source."
@@ -256,7 +259,6 @@ def render_and_send(stories: list[Story], debug_mode=False, debug_msg=""):
                 <a href="{s.link}" style="color:#007bff; font-size:13px; text-decoration:none; font-weight:500;">Read Source: {s.source} →</a>
             </div>"""
 
-        # Fixed desktop rendering layout wrapper (min-width logic applied)
         email_html = f"""
         <html>
         <head>
@@ -286,6 +288,12 @@ def render_and_send(stories: list[Story], debug_mode=False, debug_msg=""):
         smtp.send_message(msg)
 
 if __name__ == "__main__":
+    # Diagnostic log to verify secret availability in GitHub Actions console
+    if not os.environ.get("GEMINI_API_KEY"):
+        print("WARNING: GEMINI_API_KEY environment variable is missing or empty.")
+    else:
+        print("GEMINI_API_KEY detected in environment variables.")
+
     all_stories = fetch_stories()
     for s in all_stories: score_story(s)
     top_selection = pick_top(all_stories)
