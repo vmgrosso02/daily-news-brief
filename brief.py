@@ -9,6 +9,10 @@ import feedparser
 from dataclasses import dataclass
 from typing import Iterable
 
+# Import Google GenAI SDK
+from google import genai
+from google.genai import types
+
 # ---------------------------------------------------------------------------
 # CONFIG & SOURCE LOCKS
 # ---------------------------------------------------------------------------
@@ -16,6 +20,10 @@ EMAIL_TO            = os.environ.get("EMAIL_TO")
 RECIPIENT_NAME      = os.environ.get("RECIPIENT_NAME", "Michael")
 RESEND_API_KEY      = os.environ.get("RESEND_API_KEY", "")
 EMAIL_FROM_RESEND   = "Daily Brief <onboarding@resend.dev>"
+
+# Initialize Gemini Client (picks up GEMINI_API_KEY from environment variables)
+GEMINI_API_KEY      = os.environ.get("GEMINI_API_KEY")
+ai_client           = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 TOP_N = 5
 MAX_PER_TOPIC = 2
@@ -39,41 +47,40 @@ TOPIC_LABELS = {
 # EXPANDED, 100% FREE & NON-PAYWALLED FEEDS (Comprehensive Stream Matrix)
 FEEDS = [
     # --- Markets & Finance ---
-    ("Reuters Business",        "https://feeds.reuters.com/reuters/businessNews",                  0.95),
+    ("Reuters Business",        "https://feeds.reuters.com/reuters/businessNews",                0.95),
     ("CNBC Business",           "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10001142", 0.95),
-    ("Yahoo Finance",           "https://finance.yahoo.com/news/rssindex",                          0.85),
+    ("Yahoo Finance",           "https://finance.yahoo.com/news/rssindex",                        0.85),
     ("MarketWatch Top",         "http://feeds.marketwatch.com/marketwatch/topstories/",           0.90),
-    ("Benzinga Core",           "https://feeds.benzinga.com/benzinga",                             0.85),
-    ("Federal Reserve News",    "https://www.federalreserve.gov/feeds/press_all.xml",              1.00),
+    ("Benzinga Core",           "https://feeds.benzinga.com/benzinga",                            0.85),
+    ("Federal Reserve News",    "https://www.federalreserve.gov/feeds/press_all.xml",             1.00),
     
     # --- AI & Tech ---
-    ("Ars Technica",            "https://feeds.feedburner.com/arstechnica/index",                  0.95),
-    ("The Verge",               "https://www.theverge.com/rss/index.xml",                          0.90),
-    ("TechCrunch",              "https://techcrunch.com/feed/",                                    0.90),
-    ("Hacker News Top",         "https://news.ycombinator.com/rss",                                0.95),
-    ("Tech Xplore",             "https://techxplore.com/feeds/",                                   0.90),
-    ("Wired Top Stories",       "https://www.wired.com/feed/rss",                                  0.90),
-    ("Engadget",                "https://www.engadget.com/rss.xml",                                0.85),
+    ("Ars Technica",            "https://feeds.feedburner.com/arstechnica/index",                 0.95),
+    ("The Verge",               "https://www.theverge.com/rss/index.xml",                         0.90),
+    ("TechCrunch",              "https://techcrunch.com/feed/",                                   0.90),
+    ("Hacker News Top",         "https://news.ycombinator.com/rss",                               0.95),
+    ("Tech Xplore",             "https://techxplore.com/feeds/",                                  0.90),
+    ("Wired Top Stories",       "https://www.wired.com/feed/rss",                                 0.90),
+    ("Engadget",                "https://www.engadget.com/rss.xml",                               0.85),
     
     # --- Biotech & Neuroscience ---
-    ("BioSpace Biotech",        "https://www.biospace.com/rss/",                                   0.95),
-    ("ScienceDaily Mind/Brain", "https://www.sciencedaily.com/rss/mind_brain.xml",                  0.95),
+    ("BioSpace Biotech",        "https://www.biospace.com/rss/",                                  0.95),
+    ("ScienceDaily Mind/Brain", "https://www.sciencedaily.com/rss/mind_brain.xml",                0.95),
     ("ScienceDaily Biotech",    "https://www.sciencedaily.com/rss/matter_energy/biotechnology.xml", 0.95),
-    ("Medical Xpress",          "https://medicalxpress.com/rss-feed/",                             0.90),
-    ("Phys.org Biology",        "https://phys.org/feeds/biology-news/",                            0.90),
-    ("Fierce Biotech",          "https://www.fiercebiotech.com/fiercebiotechcom/rss-feeds",        0.90),
-    ("EurekAlert Science",      "https://www.eurekalert.org/rss/technology.xml",                   0.85),
+    ("Medical Xpress",          "https://medicalxpress.com/rss-feed/",                            0.90),
+    ("Phys.org Biology",        "https://phys.org/feeds/biology-news/",                           0.90),
+    ("Fierce Biotech",          "https://www.fiercebiotech.com/fiercebiotechcom/rss-feeds",       0.90),
+    ("EurekAlert Science",      "https://www.eurekalert.org/rss/technology.xml",                  0.85),
     
     # --- Sports ---
-    ("NCAA Lacrosse",           "https://www.ncaa.com/news/lacrosse-men/d1/rss.xml",                1.00),
-    ("Inside Lacrosse",         "https://www.insidelacrosse.com/rss",                              1.00),
-    ("ESPN NBA",                "https://www.espn.com/espn/rss/nba/news",                          0.90),
-    ("ESPN NFL",                "https://www.espn.com/espn/rss/nfl/news",                          0.90),
-    ("Ramblin Wreck (GT)",      "https://ramblinwreck.com/feed/",                                  0.95),
-    ("Bleacher Report",         "https://bleacherreport.com/articles/feed",                        0.85),
+    ("NCAA Lacrosse",           "https://www.ncaa.com/news/lacrosse-men/d1/rss.xml",              1.00),
+    ("Inside Lacrosse",         "https://www.insidelacrosse.com/rss",                             1.00),
+    ("ESPN NBA",                "https://www.espn.com/espn/rss/nba/news",                         0.90),
+    ("ESPN NFL",                "https://www.espn.com/espn/rss/nfl/news",                         0.90),
+    ("Ramblin Wreck (GT)",      "https://ramblinwreck.com/feed/",                                 0.95),
+    ("Bleacher Report",         "https://bleacherreport.com/articles/feed",                       0.85),
 ]
 
-# DEEPLY EXPANDED KEYWORDS FOR SCALED MINING
 INTERESTS = {
     "finance_markets": {
         "weight": 1.0, 
@@ -123,7 +130,6 @@ class Story:
 
     @property
     def total_score(self) -> float:
-        # Recency calculation (half-life of 12 hours)
         age_h = max((dt.datetime.utcnow() - self.published).total_seconds() / 3600.0, 0)
         recency = 0.5 ** (age_h / 12.0)
         return self.topic_score * self.source_weight * recency
@@ -131,6 +137,30 @@ class Story:
 def _clean(text: str) -> str:
     text = re.sub(r"<[^>]+>", "", text or "")
     return html.unescape(text).strip()
+
+def enrich_story_with_ai(title: str, summary: str) -> str:
+    """Uses Gemini 2.5 Flash to synthesize a brief, 2-sentence takeaway."""
+    if not ai_client:
+        return summary
+    
+    prompt = f"""
+    Analyze the following news headline and summary and provide a brief context block. 
+    It must be strictly 1 to 2 sentences long, synthesized for signal and not engagement.
+    Start the response exactly with "The Takeaway:" followed by your concise synthesis.
+    
+    Headline: {title}
+    Summary: {summary}
+    """
+    
+    try:
+        response = ai_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
+        return response.text.strip()
+    except Exception as e:
+        print(f"AI enrichment failed: {e}")
+        return summary
 
 def fetch_stories() -> list[Story]:
     stories = []
@@ -151,10 +181,15 @@ def fetch_stories() -> list[Story]:
                 if age_h > MAX_AGE_HOURS:
                     continue
 
-                # Fallback to "description" if "summary" is missing/empty
                 raw_summary = entry.get("summary") or entry.get("description") or ""
                 cleaned_summary = _clean(raw_summary)
                 final_summary = cleaned_summary[:350] + "..." if cleaned_summary else "No summary provided by source."
+
+                # Enrich with Gemini AI
+                ai_enriched_summary = enrich_story_with_ai(
+                    title=_clean(entry.get("title", "")), 
+                    summary=final_summary
+                )
 
                 stories.append(Story(
                     title=_clean(entry.get("title", "")),
@@ -162,7 +197,7 @@ def fetch_stories() -> list[Story]:
                     source=name,
                     source_weight=weight,
                     published=dt_obj,
-                    summary=final_summary
+                    summary=ai_enriched_summary
                 ))
         except: 
             continue
@@ -173,7 +208,6 @@ def score_story(story: Story):
     best_topic, best_score = "general", 0.1
     
     for topic, cfg in INTERESTS.items():
-        # SOURCE LOCK: Only allow "Sports" if source is in the sports list
         if topic == "sports" and story.source not in SPORTS_SOURCES:
             continue
             
@@ -190,7 +224,7 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
     picked_sports = []
     seen = set()
 
-    # 1. Mandatory Sports Slot (Must be from a sports source)
+    # 1. Mandatory Sports Slot
     for s in ranked:
         if s.source in SPORTS_SOURCES and s.link not in seen:
             picked_sports.append(s)
@@ -216,17 +250,11 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
 
 def render_and_send(stories: list[Story]):
     now = dt.datetime.utcnow()
-    
-    # Offset UTC time to match Miami Time (UTC - 4 hours) 
-    # This guarantees the day of the week matches your actual morning calendar date
     miami_time = now - dt.timedelta(hours=4)
     local_hour = miami_time.hour
     period = "Morning" if local_hour < 12 else "Evening"
-    
-    # Formats heading to display explicitly as: "Thursday, June 18"
     date_str = miami_time.strftime('%A, %B %d')
     
-    # Simple HTML assembly
     arts_html = ""
     for i, s in enumerate(stories, 1):
         label = TOPIC_LABELS.get(s.topic, "Briefing")
