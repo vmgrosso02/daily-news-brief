@@ -139,7 +139,7 @@ def enrich_story_with_ai(title: str, summary: str) -> str:
     if not ai_client:
         return summary
     try:
-        prompt = f"Summarize this news headline and details into 1-2 tight sentences explaining the ultimate significance. Do not repeat the title. Headline: {title}. Details: {summary}"
+        prompt = f"Summarize this news headline and details into 1-2 tight sentences explaining the ultimate significance. Start with 'The Takeaway: '. Do not repeat the title. Headline: {title}. Details: {summary}"
         response = ai_client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         return response.text.strip()
     except Exception as e:
@@ -204,7 +204,6 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
     # 1. Mandatory Sports Slot Lock
     for s in ranked:
         if s.source in SPORTS_SOURCES and s.link not in seen:
-            # Inject Gemini summary on ultimate selection to optimize API calls
             s.summary = enrich_story_with_ai(s.title, s.summary)
             picked_sports.append(s)
             seen.add(s.link)
@@ -215,12 +214,13 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
     per_source = {}  
 
     for s in ranked:
-        if len(picked_general) >= (TOP_N - 1): break
+        # Fallback: If no sports story was found, max general slots goes up to TOP_N (5) instead of 4
+        max_general_slots = TOP_N - len(picked_sports)
+        if len(picked_general) >= max_general_slots: break
         if s.link in seen or s.source in SPORTS_SOURCES: continue
         if per_topic.get(s.topic, 0) >= MAX_PER_TOPIC: continue
         if per_source.get(s.source, 0) >= MAX_PER_SOURCE: continue 
         
-        # Inject Gemini summary right before adding to email
         s.summary = enrich_story_with_ai(s.title, s.summary)
         picked_general.append(s)
         per_topic[s.topic] = per_topic.get(s.topic, 0) + 1
@@ -256,7 +256,6 @@ def render_and_send(stories: list[Story], debug_mode=False, debug_msg=""):
             {arts_html}
         </body></html>"""
 
-    # Direct SMTP Engine Delivery replacing Resend
     msg = EmailMessage()
     msg['Subject'] = f"Your {period} Briefing — {date_str}" if not debug_mode else "Daily Brief Alert: No Stories Found"
     msg['From'] = f"Daily Brief <{GMAIL_USER}>"
@@ -275,6 +274,5 @@ if __name__ == "__main__":
     if top_selection:
         render_and_send(top_selection)
     else:
-        # Instead of failing silently, send a diagnostic message to your email
         err_msg = f"Fetched total of {len(all_stories)} raw stories, but 0 cleared the 24-hour freshness or keyword filtering constraints."
         render_and_send([], debug_mode=True, debug_msg=err_msg)
