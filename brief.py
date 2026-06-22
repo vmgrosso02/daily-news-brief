@@ -21,7 +21,7 @@ GMAIL_USER          = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD  = os.environ.get("GMAIL_APP_PASSWORD")
 GEMINI_API_KEY      = os.environ.get("GEMINI_API_KEY")
 
-# Instantiate the GenAI client using the mapped secret key
+# Initialize the Gemini SDK client with our repository secret
 ai_client = None
 if GEMINI_API_KEY and GEMINI_API_KEY.strip():
     try:
@@ -31,9 +31,9 @@ if GEMINI_API_KEY and GEMINI_API_KEY.strip():
 
 TOP_N = 5
 MAX_PER_TOPIC = 2
-MAX_PER_SOURCE = 1      
-MAX_AGE_HOURS = 24      
-SPORTS_AGE_HOURS = 48    
+MAX_PER_SOURCE = 1      # Enforce source diversity
+MAX_AGE_HOURS = 24      # Regular news window
+SPORTS_AGE_HOURS = 120   # Expanded to 5 days so you handle slow news cycles/weekends
 
 SPORTS_SOURCES = [
     "NCAA Lacrosse", "Inside Lacrosse", "ESPN NBA", "ESPN NFL", 
@@ -94,28 +94,27 @@ INTERESTS = {
         ]
     },
     "ai_tech": {
-        "weight": 1.0, 
+        "weight": 1.3, # Boosted to capture startup/app creation trends
         "keywords": [
             "ai agents", "robotics", "openai", "claude", "gpu", "llm", "chatgpt", "generative ai", 
-            "nvidia", "silicon", "machine learning", "deep learning", "anthropic", "copilot", 
-            "quantum computing", "semiconductor", "tsmc", "amd", "transformers", "neural network", "hbm"
+            "nvidia", "anthropic", "copilot", "quantum computing", "semiconductor", "transformers", 
+            "neural network", "marketing automation", "software architecture", "founder", "startup"
         ]
     },
     "biotech_neuro": {
-        "weight": 1.2, 
+        "weight": 1.4, # Boosted specifically for medical device and neurological tracking
         "keywords": [
             "fda", "crispr", "neuroscience", "neuralink", "clinical trial", "gene therapy", 
-            "alzheimer", "brain-computer", "biopharma", "immunotherapy", "oncology", "pharma", 
-            "mrna", "therapeutic", "neurodegenerative", "dementia", "synapse", "optogenetics", 
-            "genomics", "car-t", "brain mapping", "axon", "parkinson"
+            "alzheimer", "brain-computer", "biopharma", "parkinson", "medical device", "neurology",
+            "therapeutic", "neurodegenerative", "dementia", "synapse", "optogenetics", "catheter"
         ]
     },
     "sports": {
-        "weight": 4.0, 
+        "weight": 4.5, # Aggressive weight to pull through your specific teams
         "keywords": [
-            "lacrosse", "lax", "ncaa", "quarterback", "nba", "nfl", "yellow jackets", "touchdown", 
-            "playoffs", "espn", "championship", "draft", "super bowl", "finals", "bracket", 
-            "completions", "touchdowns", "halftime", "mvp", "gridiron", "sports", "game", "team", "coach"
+            "lacrosse", "lax", "uva", "virginia cavaliers", "celtics", "bruins", "red sox", 
+            "patriots", "georgia tech", "yellow jackets", "nba", "nfl", "draft", "playoffs", 
+            "touchdown", "espn", "championship", "finals", "college football", "basketball"
         ]
     },
 }
@@ -148,16 +147,23 @@ def enrich_story_with_ai(title: str, summary: str) -> str:
     text_to_analyze = summary if (summary.strip() and summary.strip().lower() != title.strip().lower()) else "Extract context and generate critical takeaway from headline."
     try:
         prompt = (
-            f"Write a concise 1-2 sentence summary explaining the core significance of this news. "
-            f"You MUST start your response explicitly with the words 'The Takeaway: '. "
-            f"Do not repeat the headline verbatim.\n\n"
+            f"You are a sharp, elite executive brief assistant. Provide a highly concise 1-2 sentence takeaway "
+            f"explaining the core relevance of this headline to the user, Michael.\n\n"
+            f"Michael's Profile to contextually filter news:\n"
+            f"- A medical device professional working in neurological fields (Parkinson's disease, brain tech, neuro tech, FDA approvals).\n"
+            f"- An entrepreneur and application creator building a company leveraging modern AI models and marketing tech tools.\n"
+            f"- A highly dedicated fan of the Boston Celtics, Boston Bruins, Boston Red Sox, New England Patriots, Georgia Tech Yellow Jackets (Football/Basketball), and D1 Lacrosse (specifically Virginia/UVA Lacrosse), alongside major general NBA/NFL/CFB storylines.\n\n"
+            f"CRITICAL INSTRUCTIONS:\n"
+            f"1. You MUST start your response explicitly with the words 'The Takeaway: '.\n"
+            f"2. Tie AI/Tech/Finance/Neuro news directly into how it scales an app company, impacts macro markets, or affects medical device innovation where applicable. If it is a sports story, tie it directly to his allegiance or its competitive impact on his teams.\n"
+            f"3. Do not repeat the headline verbatim.\n\n"
             f"Headline: {title}\n"
             f"Details: {text_to_analyze}"
         )
         response = ai_client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         if response.text:
             return response.text.strip()
-        return summary if summary else "No clear summary notes generated."
+        return summary if summary else "No summary details available."
     except Exception as e:
         print(f"--- GEMINI API HANDSHAKE ERROR --- Detail: {e}")
         return summary if summary.strip() else "No description available."
@@ -217,7 +223,7 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
     picked_sports = []
     seen = set()
 
-    # 1. Mandatory Sports Slot Lock
+    # 1. Lock down the mandatory sports slot
     for s in ranked:
         if s.source in SPORTS_SOURCES and s.link not in seen:
             s.summary = enrich_story_with_ai(s.title, s.summary)
@@ -225,7 +231,7 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
             seen.add(s.link)
             break 
     
-    # 2. General constraints allocation
+    # 2. Allocate general categories with diversity tracking
     per_topic = {}
     per_source = {}  
 
