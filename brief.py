@@ -137,14 +137,24 @@ def _clean(text: str) -> str:
 
 def enrich_story_with_ai(title: str, summary: str) -> str:
     if not ai_client:
-        return summary
+        return summary if summary else "No description available."
+    
+    text_to_analyze = summary if summary.strip() else "No detailed description available."
     try:
-        prompt = f"Summarize this news headline and details into 1-2 tight sentences explaining the ultimate significance. Start with 'The Takeaway: '. Do not repeat the title. Headline: {title}. Details: {summary}"
+        prompt = (
+            f"Write a concise 1-2 sentence summary explaining the core significance of this news. "
+            f"You MUST start your response explicitly with the words 'The Takeaway: '. "
+            f"Do not repeat the headline verbatim.\n\n"
+            f"Headline: {title}\n"
+            f"Details: {text_to_analyze}"
+        )
         response = ai_client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
-        return response.text.strip()
+        if response.text:
+            return response.text.strip()
+        return summary if summary else "No summary details provided by source."
     except Exception as e:
-        print(f"AI enrichment failed: {e}")
-        return summary
+        print(f"--- GEMINI API CRASHED --- Error details: {e}")
+        return summary if summary.strip() else "No description available."
 
 def fetch_stories() -> list[Story]:
     stories = []
@@ -159,10 +169,7 @@ def fetch_stories() -> list[Story]:
             parsed = feedparser.parse(resp.content)
             for entry in parsed.entries[:15]:
                 dt_obj = dt.datetime(*(entry.get("published_parsed") or entry.get("updated_parsed") or dt.datetime.utcnow().timetuple())[:6])
-                
-                # Check 24-hour freshness rule
-                age_h = (dt.datetime.utcnow() - dt_obj).total_seconds() / 3600.0
-                if age_h > MAX_AGE_HOURS:
+                if (dt.datetime.utcnow() - dt_obj).total_seconds() / 3600.0 > MAX_AGE_HOURS:
                     continue
 
                 raw_summary = entry.get("summary") or entry.get("description") or ""
@@ -214,7 +221,6 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
     per_source = {}  
 
     for s in ranked:
-        # Fallback: If no sports story was found, max general slots goes up to TOP_N (5) instead of 4
         max_general_slots = TOP_N - len(picked_sports)
         if len(picked_general) >= max_general_slots: break
         if s.link in seen or s.source in SPORTS_SOURCES: continue
@@ -243,18 +249,31 @@ def render_and_send(stories: list[Story], debug_mode=False, debug_msg=""):
         for i, s in enumerate(stories, 1):
             label = TOPIC_LABELS.get(s.topic, "Briefing")
             arts_html += f"""
-            <div style="border-bottom:1px solid #eee; padding:15px 0;">
-                <small style="color:#666;">{i:02d} | {label}</small>
-                <h3 style="margin:5px 0;">{s.title}</h3>
-                <p style="font-size:14px; color:#333;">{s.summary}</p>
-                <a href="{s.link}" style="color:#007bff; font-size:12px;">Read Source: {s.source} →</a>
+            <div style="border-bottom:1px solid #eee; padding:18px 0;">
+                <small style="color:#666; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">{i:02d} | {label}</small>
+                <h3 style="margin:6px 0 8px 0; font-size:18px; line-height:1.4; color:#111;">{s.title}</h3>
+                <p style="font-size:14px; line-height:1.5; color:#333; margin:0 0 8px 0;">{s.summary}</p>
+                <a href="{s.link}" style="color:#007bff; font-size:13px; text-decoration:none; font-weight:500;">Read Source: {s.source} →</a>
             </div>"""
 
-        email_html = f"""<html><body style="font-family:sans-serif; max-width:600px; margin:auto;">
-            <h2>Your {period} Briefing — {date_str}</h2>
-            <p>Good {period}, {RECIPIENT_NAME}. Here is your news.</p>
-            {arts_html}
-        </body></html>"""
+        # Fixed desktop rendering layout wrapper (min-width logic applied)
+        email_html = f"""
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin:0; padding:20px; background-color:#f9f9f9;">
+            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:650px; min-width:450px; background-color:#ffffff; border:1px solid #e5e5e5; border-radius:6px; padding:30px;">
+                <tr>
+                    <td>
+                        <h2 style="margin:0 0 4px 0; font-size:24px; color:#111;">Your {period} Briefing — {date_str}</h2>
+                        <p style="margin:0 0 20px 0; font-size:15px; color:#555;">Good {period}, {RECIPIENT_NAME}. Here is your structured stream.</p>
+                        {arts_html}
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>"""
 
     msg = EmailMessage()
     msg['Subject'] = f"Your {period} Briefing — {date_str}" if not debug_mode else "Daily Brief Alert: No Stories Found"
@@ -274,5 +293,5 @@ if __name__ == "__main__":
     if top_selection:
         render_and_send(top_selection)
     else:
-        err_msg = f"Fetched total of {len(all_stories)} raw stories, but 0 cleared the 24-hour freshness or keyword filtering constraints."
+        err_msg = f"Fetched total of {len(all_stories)} raw stories, but 0 cleared constraints."
         render_and_send([], debug_mode=True, debug_msg=err_msg)
