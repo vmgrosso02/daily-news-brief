@@ -21,7 +21,7 @@ GMAIL_USER          = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD  = os.environ.get("GMAIL_APP_PASSWORD")
 GEMINI_API_KEY      = os.environ.get("GEMINI_API_KEY")
 
-# Explicitly pass the key if found in the environment variables
+# Instantiate the GenAI client using the mapped secret key
 ai_client = None
 if GEMINI_API_KEY and GEMINI_API_KEY.strip():
     try:
@@ -31,9 +31,9 @@ if GEMINI_API_KEY and GEMINI_API_KEY.strip():
 
 TOP_N = 5
 MAX_PER_TOPIC = 2
-MAX_PER_SOURCE = 1      # Strict source diversity limit
-MAX_AGE_HOURS = 24      # Hard age cutoff for regular news
-SPORTS_AGE_HOURS = 48    # Extended window for sports to protect weekend gaps
+MAX_PER_SOURCE = 1      
+MAX_AGE_HOURS = 24      
+SPORTS_AGE_HOURS = 48    
 
 SPORTS_SOURCES = [
     "NCAA Lacrosse", "Inside Lacrosse", "ESPN NBA", "ESPN NFL", 
@@ -176,7 +176,6 @@ def fetch_stories() -> list[Story]:
             for entry in parsed.entries[:15]:
                 dt_obj = dt.datetime(*(entry.get("published_parsed") or entry.get("updated_parsed") or dt.datetime.utcnow().timetuple())[:6])
                 
-                # Check aging window based on feed type
                 age_h = (dt.datetime.utcnow() - dt_obj).total_seconds() / 3600.0
                 allowed_age = SPORTS_AGE_HOURS if name in SPORTS_SOURCES else MAX_AGE_HOURS
                 if age_h > allowed_age:
@@ -243,9 +242,7 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
         per_source[s.source] = per_source.get(s.source, 0) + 1  
         seen.add(s.link)
 
-    # Fallback to absolute best if strict filtering left us completely empty-handed
     if not picked_general and not picked_sports:
-        print("CRITICAL FALLBACK: Loose fallback constraints engaged.")
         for s in ranked[:TOP_N]:
             s.summary = enrich_story_with_ai(s.title, s.summary)
             picked_general.append(s)
@@ -305,10 +302,6 @@ if __name__ == "__main__":
         print(f"ENVIRONMENT CHECK: GEMINI_API_KEY discovered. Character length: {len(os.environ.get('GEMINI_API_KEY'))}")
 
     all_stories = fetch_stories()
-    print(f"Total raw stories fetched: {len(all_stories)}")
-    
     for s in all_stories: score_story(s)
     top_selection = pick_top(all_stories)
-    
-    print(f"Final stories selected for email production: {len(top_selection)}")
     render_and_send(top_selection)
