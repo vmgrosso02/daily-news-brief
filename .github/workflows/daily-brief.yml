@@ -2,9 +2,9 @@ name: Daily News Brief
 
 on:
   schedule:
-    # 09:45 UTC is 5:45 AM ET (Miami) - Aiming for early delivery
+    # 09:45 UTC is 4:45 AM CT (Dallas)
     - cron: '45 9 * * *'
-    # 21:45 UTC is 5:45 PM ET (Miami)
+    # 21:45 UTC is 4:45 PM CT (Dallas)
     - cron: '45 21 * * *'
   workflow_dispatch:
 
@@ -18,14 +18,16 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.10' # Updated to 3.10 for better compatibility
 
       - name: Install dependencies
-        run: pip install feedparser requests
+        # Now uses your requirements.txt which includes google-genai
+        run: pip install -r requirements.txt
 
       - name: Run script
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           EMAIL_TO: "vmgrosso02@gmail.com"
           RECIPIENT_NAME: "Michael"
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }} # Added for Gemini
         run: python brief.py
