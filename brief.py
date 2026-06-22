@@ -4,6 +4,7 @@ import html
 import json
 import os
 import re
+import time
 import requests
 import feedparser
 import smtplib
@@ -50,7 +51,7 @@ TOPIC_LABELS = {
 
 FEEDS = [
     # --- Markets & Finance ---
-    ("Reuters Business",        "https://feeds.reuters.com/reuters/businessNews",                   0.95),
+    ("Reuters Business",        "https://feeds.reuters.com/reuters/businessNews",                    0.95),
     ("CNBC Business",           "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10001142", 0.95),
     ("Yahoo Finance",           "https://finance.yahoo.com/news/rssindex",                          0.85),
     ("MarketWatch Top",         "http://feeds.marketwatch.com/marketwatch/topstories/",             0.90),
@@ -58,7 +59,7 @@ FEEDS = [
     ("Federal Reserve News",    "https://www.federalreserve.gov/feeds/press_all.xml",               1.00),
     
     # --- AI & Tech ---
-    ("Ars Technica",            "https://feeds.feedburner.com/arstechnica/index",                   0.95),
+    ("Ars Technica",            "https://feeds.feedburner.com/arstechnica/index",                    0.95),
     ("The Verge",               "https://www.theverge.com/rss/index.xml",                           0.90),
     ("TechCrunch",              "https://techcrunch.com/feed/",                                     0.90),
     ("Hacker News Top",         "https://news.ycombinator.com/rss",                                 0.95),
@@ -73,10 +74,10 @@ FEEDS = [
     ("Medical Xpress",          "https://medicalxpress.com/rss-feed/",                              0.90),
     ("Phys.org Biology",        "https://phys.org/feeds/biology-news/",                             0.90),
     ("Fierce Biotech",          "https://www.fiercebiotech.com/fiercebiotechcom/rss-feeds",         0.90),
-    ("EurekAlert Science",      "https://www.eurekalert.org/rss/technology.xml",                    0.85),
+    ("EurekAlert Science",      "https://www.eurekalert.org/rss/technology.xml",                     0.85),
     
     # --- Sports ---
-    ("NCAA Lacrosse",           "https://www.ncaa.com/news/lacrosse-men/d1/rss.xml",                1.00),
+    ("NCAA Lacrosse",           "https://www.ncaa.com/news/lacrosse-men/d1/rss.xml",                 1.00),
     ("Inside Lacrosse",         "https://www.insidelacrosse.com/rss",                               1.00),
     ("ESPN NBA",                "https://www.espn.com/espn/rss/nba/news",                           0.90),
     ("ESPN NFL",                "https://www.espn.com/espn/rss/nfl/news",                           0.90),
@@ -94,7 +95,7 @@ INTERESTS = {
         ]
     },
     "ai_tech": {
-        "weight": 1.3, # Boosted to capture startup/app creation trends
+        "weight": 1.3, 
         "keywords": [
             "ai agents", "robotics", "openai", "claude", "gpu", "llm", "chatgpt", "generative ai", 
             "nvidia", "anthropic", "copilot", "quantum computing", "semiconductor", "transformers", 
@@ -102,7 +103,7 @@ INTERESTS = {
         ]
     },
     "biotech_neuro": {
-        "weight": 1.4, # Boosted specifically for medical device and neurological tracking
+        "weight": 1.4, 
         "keywords": [
             "fda", "crispr", "neuroscience", "neuralink", "clinical trial", "gene therapy", 
             "alzheimer", "brain-computer", "biopharma", "parkinson", "medical device", "neurology",
@@ -110,7 +111,7 @@ INTERESTS = {
         ]
     },
     "sports": {
-        "weight": 4.5, # Aggressive weight to pull through your specific teams
+        "weight": 4.5, 
         "keywords": [
             "lacrosse", "lax", "uva", "virginia cavaliers", "celtics", "bruins", "red sox", 
             "patriots", "georgia tech", "yellow jackets", "nba", "nfl", "draft", "playoffs", 
@@ -227,6 +228,7 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
     for s in ranked:
         if s.source in SPORTS_SOURCES and s.link not in seen:
             s.summary = enrich_story_with_ai(s.title, s.summary)
+            time.sleep(2.0)  # Rate limit safety delay
             picked_sports.append(s)
             seen.add(s.link)
             break 
@@ -243,6 +245,7 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
         if per_source.get(s.source, 0) >= MAX_PER_SOURCE: continue 
         
         s.summary = enrich_story_with_ai(s.title, s.summary)
+        time.sleep(2.0)  # Rate limit safety delay
         picked_general.append(s)
         per_topic[s.topic] = per_topic.get(s.topic, 0) + 1
         per_source[s.source] = per_source.get(s.source, 0) + 1  
@@ -251,6 +254,7 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
     if not picked_general and not picked_sports:
         for s in ranked[:TOP_N]:
             s.summary = enrich_story_with_ai(s.title, s.summary)
+            time.sleep(2.0)  # Rate limit safety delay
             picked_general.append(s)
 
     return picked_general + picked_sports
