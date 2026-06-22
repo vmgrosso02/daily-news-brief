@@ -19,13 +19,15 @@ EMAIL_TO            = os.environ.get("EMAIL_TO")
 RECIPIENT_NAME      = os.environ.get("RECIPIENT_NAME", "Michael")
 GMAIL_USER          = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD  = os.environ.get("GMAIL_APP_PASSWORD")
+GEMINI_API_KEY      = os.environ.get("GEMINI_API_KEY")
 
-# Let the client read GEMINI_API_KEY automatically from the environment variables
-try:
-    ai_client = genai.Client() if os.environ.get("GEMINI_API_KEY") else None
-except Exception as e:
-    print(f"Failed to initialize GenAI Client: {e}")
-    ai_client = None
+# Explicitly initialize the client with the pulled key secret
+ai_client = None
+if GEMINI_API_KEY and GEMINI_API_KEY.strip():
+    try:
+        ai_client = genai.Client(api_key=GEMINI_API_KEY.strip())
+    except Exception as e:
+        print(f"CRITICAL: Failed to instantiate GenAI Client object: {e}")
 
 TOP_N = 5
 MAX_PER_TOPIC = 2
@@ -142,7 +144,7 @@ def enrich_story_with_ai(title: str, summary: str) -> str:
     if not ai_client:
         return summary if summary else "No description available."
     
-    text_to_analyze = summary if summary.strip() else "No detailed description available."
+    text_to_analyze = summary if summary.strip() else "No detailed background descriptions provided."
     try:
         prompt = (
             f"Write a concise 1-2 sentence summary explaining the core significance of this news. "
@@ -151,13 +153,13 @@ def enrich_story_with_ai(title: str, summary: str) -> str:
             f"Headline: {title}\n"
             f"Details: {text_to_analyze}"
         )
-        response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        response = ai_client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         if response.text:
             return response.text.strip()
-        return summary if summary else "No summary details provided by source."
+        return summary if summary else "No clear summary notes generated."
     except Exception as e:
-        print(f"--- GEMINI API CRASHED --- Error details: {e}")
-        return summary if summary.strip() else "No description available."
+        print(f"--- GEMINI API HANDSHAKE ERROR --- Detail: {e}")
+        return summary if summary.strip() else "No details available."
 
 def fetch_stories() -> list[Story]:
     stories = []
@@ -252,30 +254,30 @@ def render_and_send(stories: list[Story], debug_mode=False, debug_msg=""):
         for i, s in enumerate(stories, 1):
             label = TOPIC_LABELS.get(s.topic, "Briefing")
             arts_html += f"""
-            <div style="border-bottom:1px solid #eee; padding:18px 0;">
+            <div style="border-bottom:1px solid #eee; padding:18px 0;\">
                 <small style="color:#666; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">{i:02d} | {label}</small>
                 <h3 style="margin:6px 0 8px 0; font-size:18px; line-height:1.4; color:#111;">{s.title}</h3>
-                <p style="font-size:14px; line-height:1.5; color:#333; margin:0 0 8px 0;">{s.summary}</p>
-                <a href="{s.link}" style="color:#007bff; font-size:13px; text-decoration:none; font-weight:500;">Read Source: {s.source} →</a>
+                <p style="font-size:14px; line-height:1.5; color:#333; margin:0 0 8px 0;\">{s.summary}</p>
+                <a href="{s.link}" style="color:#007bff; font-size:13px; text-decoration:none; font-weight:500;\">Read Source: {s.source} →</a>
             </div>"""
 
-        email_html = f"""
-        <html>
-        <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin:0; padding:20px; background-color:#f9f9f9;">
-            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:650px; min-width:450px; background-color:#ffffff; border:1px solid #e5e5e5; border-radius:6px; padding:30px;">
-                <tr>
-                    <td>
-                        <h2 style="margin:0 0 4px 0; font-size:24px; color:#111;">Your {period} Briefing — {date_str}</h2>
-                        <p style="margin:0 0 20px 0; font-size:15px; color:#555;">Good {period}, {RECIPIENT_NAME}. Here is your structured stream.</p>
-                        {arts_html}
-                    </td>
-                </tr>
-            </table>
-        </body>
-        </html>"""
+    email_html = f"""
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin:0; padding:20px; background-color:#f9f9f9;">
+        <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:650px; min-width:320px; background-color:#ffffff; border:1px solid #e5e5e5; border-radius:6px; padding:30px;">
+            <tr>
+                <td>
+                    <h2 style="margin:0 0 4px 0; font-size:24px; color:#111;">Your {period} Briefing — {date_str}</h2>
+                    <p style="margin:0 0 20px 0; font-size:15px; color:#555;">Good {period}, {RECIPIENT_NAME}. Here is your structured stream.</p>
+                    {arts_html}
+                </td>
+            </tr>
+        </table>
+    </body>
+    </html>"""
 
     msg = EmailMessage()
     msg['Subject'] = f"Your {period} Briefing — {date_str}" if not debug_mode else "Daily Brief Alert: No Stories Found"
@@ -288,11 +290,11 @@ def render_and_send(stories: list[Story], debug_mode=False, debug_msg=""):
         smtp.send_message(msg)
 
 if __name__ == "__main__":
-    # Diagnostic log to verify secret availability in GitHub Actions console
+    # Diagnostic checking logs
     if not os.environ.get("GEMINI_API_KEY"):
-        print("WARNING: GEMINI_API_KEY environment variable is missing or empty.")
+        print("ENVIRONMENT CRITICAL: GEMINI_API_KEY string variable was not found.")
     else:
-        print("GEMINI_API_KEY detected in environment variables.")
+        print(f"ENVIRONMENT CHECK: GEMINI_API_KEY token discovered. length: {len(os.environ.get('GEMINI_API_KEY'))}")
 
     all_stories = fetch_stories()
     for s in all_stories: score_story(s)
