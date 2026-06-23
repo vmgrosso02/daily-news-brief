@@ -12,6 +12,7 @@ from email.message import EmailMessage
 from dataclasses import dataclass
 from typing import Iterable
 from google import genai
+from google.genai import types  # Explicitly import the types module
 
 # ---------------------------------------------------------------------------
 # CONFIG & SOURCE LOCKS
@@ -142,11 +143,10 @@ def _clean(text: str) -> str:
     return html.unescape(text).strip()
 
 def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
-    """Processes all selected stories in a single API request to save daily quota limits."""
+    """Processes all selected stories in a single API request using the new types config syntax."""
     if not ai_client or not stories:
         return stories
 
-    # Build a compact payload structure for the model input
     batch_data = []
     for idx, s in enumerate(stories):
         batch_data.append({
@@ -171,10 +171,15 @@ def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
             f"Articles data:\n{json.dumps(batch_data)}"
         )
         
+        # Fixed: Instantiating structured configuration via the explicit GenAI types class
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json"
+        )
+        
         response = ai_client.models.generate_content(
             model='gemini-2.0-flash', 
             contents=prompt,
-            config={"response_mime_type": "application/json"}
+            config=config
         )
         
         if response.text:
@@ -185,7 +190,6 @@ def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
                     s.summary = parsed_responses[str_idx]
     except Exception as e:
         print(f"--- GEMINI BATCH API HANDSHAKE ERROR --- Detail: {e}")
-        # Fall back gracefully to original raw summaries if the call/parse fails
     
     return stories
 
@@ -329,7 +333,7 @@ if __name__ == "__main__":
     for s in all_stories: score_story(s)
     top_selection = pick_top(all_stories)
     
-    # Run the new single-call batch enrichment
+    # Run the updated single-call batch enrichment
     top_selection = enrich_stories_batch_with_ai(top_selection)
     
     render_and_send(top_selection)
