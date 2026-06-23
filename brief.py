@@ -145,8 +145,12 @@ def _clean(text: str) -> str:
     text = re.sub(r"<[^>]+>", "", text or "")
     return html.unescape(text).strip()
 
+MAX_AI_RETRIES = 3
+AI_RETRY_BASE_DELAY_SECONDS = 5  # 5s, then 10s between attempts
+
 def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
-    """Processes all selected stories in a single API request using the new types config syntax."""
+    """Processes all selected stories in a single API request using the new types config syntax.
+    Retries on transient errors (503 high-demand, 429 rate limit) since this runs unattended."""
     if not ai_client:
         print("AI ENRICHMENT SKIPPED: ai_client is None — GEMINI_API_KEY secret is missing, empty, or failed to initialize the client.")
         return stories
@@ -161,52 +165,64 @@ def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
             "details": s.summary if s.summary.strip() else "Context requested based on headline."
         })
 
-    try:
-        prompt = (
-            f"You are an elite, razor-sharp executive briefing assistant. Below is an array of raw news articles selected for Michael.\n\n"
-            f"Michael's Profile to contextually filter and summarize news:\n"
-            f"- A medical device professional working in neurological fields (Parkinson's disease, brain tech, neuro tech, FDA approvals).\n"
-            f"- An entrepreneur and application creator building a company leveraging modern AI models and marketing tech tools.\n"
-            f"- A highly dedicated fan of the Boston Celtics, Boston Bruins, Boston Red Sox, New England Patriots, Georgia Tech Yellow Jackets (Football/Basketball), and D1 Lacrosse (specifically Virginia/UVA Lacrosse), alongside major general NBA/NFL/CFB storylines.\n\n"
-            f"CRITICAL INSTRUCTIONS FOR OUTPUT:\n"
-            f"For each item, generate a highly concise 1-2 sentence breakdown. You MUST strictly return a JSON object containing a dictionary mapping the integer 'id' string to your output description string.\n"
-            f"Each description must explicitly start with the exact words: 'The Takeaway: '.\n"
-            f"Tie tech/finance/biotech news to his startup scale or engineering innovation target, and sports news straight to competitive impacts or his allegiances.\n\n"
-            f"Return ONLY valid JSON in the structure:\n"
-            f'{{"0": "The Takeaway: ...", "1": "The Takeaway: ..."}}\n\n'
-            f"Articles data:\n{json.dumps(batch_data)}"
-        )
-        
-        # Fixed: Instantiating structured configuration via the explicit GenAI types class
-        config = types.GenerateContentConfig(
-            response_mime_type="application/json"
-        )
-        
-        response = ai_client.models.generate_content(
-            model='gemini-2.5-flash-lite',
-            contents=prompt,
-            config=config
-        )
-        
-        if response.text:
-            parsed_responses = json.loads(response.text.strip())
-            applied = 0
-            for idx, s in enumerate(stories):
-                str_idx = str(idx)
-                if str_idx in parsed_responses:
-                    s.summary = parsed_responses[str_idx]
-                    applied += 1
-            print(f"AI ENRICHMENT OK: applied {applied}/{len(stories)} takeaways.")
-        else:
-            finish_reason = None
-            try:
-                finish_reason = response.candidates[0].finish_reason
-            except Exception:
-                pass
-            print(f"AI ENRICHMENT WARNING: response.text was empty (finish_reason={finish_reason}). Raw response: {response}")
-    except Exception as e:
-        print(f"--- GEMINI BATCH API HANDSHAKE ERROR --- Detail: {e}")
-    
+    prompt = (
+        f"You are an elite, razor-sharp executive briefing assistant. Below is an array of raw news articles selected for Michael.\n\n"
+        f"Michael's Profile to contextually filter and summarize news:\n"
+        f"- A medical device professional working in neurological fields (Parkinson's disease, brain tech, neuro tech, FDA approvals).\n"
+        f"- An entrepreneur and application creator building a company leveraging modern AI models and marketing tech tools.\n"
+        f"- A highly dedicated fan of the Boston Celtics, Boston Bruins, Boston Red Sox, New England Patriots, Georgia Tech Yellow Jackets (Football/Basketball), and D1 Lacrosse (specifically Virginia/UVA Lacrosse), alongside major general NBA/NFL/CFB storylines.\n\n"
+        f"CRITICAL INSTRUCTIONS FOR OUTPUT:\n"
+        f"For each item, generate a highly concise 1-2 sentence breakdown. You MUST strictly return a JSON object containing a dictionary mapping the integer 'id' string to your output description string.\n"
+        f"Each description must explicitly start with the exact words: 'The Takeaway: '.\n"
+        f"Tie tech/finance/biotech news to his startup scale or engineering innovation target, and sports news straight to competitive impacts or his allegiances.\n\n"
+        f"Return ONLY valid JSON in the structure:\n"
+        f'{{"0": "The Takeaway: ...", "1": "The Takeaway: ..."}}\n\n'
+        f"Articles data:\n{json.dumps(batch_data)}"
+    )
+
+    # Fixed: Instantiating structured configuration via the explicit GenAI types class
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json"
+    )
+
+    for attempt in range(1, MAX_AI_RETRIES + 1):
+        try:
+            response = ai_client.models.generate_content(
+                model='gemini-2.5-flash-lite',
+                contents=prompt,
+                config=config
+            )
+
+            if response.text:
+                parsed_responses = json.loads(response.text.strip())
+                applied = 0
+                for idx, s in enumerate(stories):
+                    str_idx = str(idx)
+                    if str_idx in parsed_responses:
+                        s.summary = parsed_responses[str_idx]
+                        applied += 1
+                print(f"AI ENRICHMENT OK: applied {applied}/{len(stories)} takeaways (attempt {attempt}/{MAX_AI_RETRIES}).")
+                return stories
+            else:
+                finish_reason = None
+                try:
+                    finish_reason = response.candidates[0].finish_reason
+                except Exception:
+                    pass
+                print(f"AI ENRICHMENT WARNING: response.text was empty (finish_reason={finish_reason}). Raw response: {response}")
+                return stories  # not transient — retrying won't help an empty response
+
+        except Exception as e:
+            err_str = str(e)
+            is_transient = any(marker in err_str for marker in ["503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "high demand"])
+            if is_transient and attempt < MAX_AI_RETRIES:
+                delay = AI_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
+                print(f"--- GEMINI TRANSIENT ERROR (attempt {attempt}/{MAX_AI_RETRIES}) --- Detail: {e}. Retrying in {delay}s...")
+                time.sleep(delay)
+                continue
+            print(f"--- GEMINI BATCH API HANDSHAKE ERROR (attempt {attempt}/{MAX_AI_RETRIES}, final) --- Detail: {e}")
+            return stories
+
     return stories
 
 def ensure_summaries(stories: list[Story]) -> list[Story]:
