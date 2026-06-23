@@ -11,6 +11,7 @@ import smtplib
 from email.message import EmailMessage
 from dataclasses import dataclass
 from typing import Iterable
+from zoneinfo import ZoneInfo
 from google import genai
 from google.genai import types  # Explicitly import the types module
 
@@ -22,6 +23,8 @@ RECIPIENT_NAME      = os.environ.get("RECIPIENT_NAME", "Michael")
 GMAIL_USER          = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD  = os.environ.get("GMAIL_APP_PASSWORD")
 GEMINI_API_KEY      = os.environ.get("GEMINI_API_KEY")
+
+MIAMI_TZ = ZoneInfo("America/New_York")  # Miami follows US Eastern Time (EDT/EST) year-round
 
 # Initialize the Gemini SDK client
 ai_client = None
@@ -177,7 +180,7 @@ def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
         )
         
         response = ai_client.models.generate_content(
-            model='gemini-2.0-flash', 
+            model='gemini-2.5-flash-lite',
             contents=prompt,
             config=config
         )
@@ -191,6 +194,14 @@ def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
     except Exception as e:
         print(f"--- GEMINI BATCH API HANDSHAKE ERROR --- Detail: {e}")
     
+    return stories
+
+def ensure_summaries(stories: list[Story]) -> list[Story]:
+    """Safety net: never let a story render with a blank body, regardless of why
+    (empty RSS entry, AI enrichment failure, API outage, etc.)."""
+    for s in stories:
+        if not s.summary or not s.summary.strip():
+            s.summary = "No summary available for this one. Tap through to read the full story."
     return stories
 
 def fetch_stories() -> list[Story]:
@@ -278,8 +289,7 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
     return picked_general + picked_sports
 
 def render_and_send(stories: list[Story]):
-    now = dt.datetime.utcnow()
-    miami_time = now - dt.timedelta(hours=4)
+    miami_time = dt.datetime.now(dt.timezone.utc).astimezone(MIAMI_TZ)
     local_hour = miami_time.hour
     period = "Morning" if local_hour < 12 else "Evening"
     date_str = miami_time.strftime('%A, %B %d')
@@ -304,8 +314,8 @@ def render_and_send(stories: list[Story]):
         <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:650px; min-width:320px; background-color:#ffffff; border:1px solid #e5e5e5; border-radius:6px; padding:30px;">
             <tr>
                 <td>
-                    <h2 style="margin:0 0 4px 0; font-size:24px; color:#111;">Your {period} Briefing — {date_str}</h2>
-                    <p style="margin:0 0 20px 0; font-size:15px; color:#555;">Good {period}, {RECIPIENT_NAME}. Here is your structured stream.</p>
+                    <h2 style="margin:0 0 4px 0; font-size:24px; color:#111;">Your Miami {period} Briefing: {date_str}</h2>
+                    <p style="margin:0 0 20px 0; font-size:15px; color:#555;">Good {period}, {RECIPIENT_NAME}. Here's what's worth knowing right now.</p>
                     {arts_html}
                 </td>
             </tr>
@@ -314,7 +324,7 @@ def render_and_send(stories: list[Story]):
     </html>"""
 
     msg = EmailMessage()
-    msg['Subject'] = f"Your {period} Briefing — {date_str}"
+    msg['Subject'] = f"Your Miami {period} Briefing: {date_str}"
     msg['From'] = f"Daily Brief <{GMAIL_USER}>"
     msg['To'] = EMAIL_TO
     msg.add_alternative(email_html, subtype='html')
@@ -335,5 +345,6 @@ if __name__ == "__main__":
     
     # Run the updated single-call batch enrichment
     top_selection = enrich_stories_batch_with_ai(top_selection)
+    top_selection = ensure_summaries(top_selection)
     
     render_and_send(top_selection)
