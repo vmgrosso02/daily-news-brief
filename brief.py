@@ -22,7 +22,7 @@ GMAIL_USER          = os.environ.get("GMAIL_USER")
 GMAIL_APP_PASSWORD  = os.environ.get("GMAIL_APP_PASSWORD")
 GEMINI_API_KEY      = os.environ.get("GEMINI_API_KEY")
 
-# Initialize the Gemini SDK client with our repository secret
+# Initialize the Gemini SDK client
 ai_client = None
 if GEMINI_API_KEY and GEMINI_API_KEY.strip():
     try:
@@ -141,33 +141,53 @@ def _clean(text: str) -> str:
     text = re.sub(r"<[^>]+>", "", text or "")
     return html.unescape(text).strip()
 
-def enrich_story_with_ai(title: str, summary: str) -> str:
-    if not ai_client:
-        return summary if summary else "No description available."
-    
-    text_to_analyze = summary if (summary.strip() and summary.strip().lower() != title.strip().lower()) else "Extract context and generate critical takeaway from headline."
+def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
+    """Processes all selected stories in a single API request to save daily quota limits."""
+    if not ai_client or not stories:
+        return stories
+
+    # Build a compact payload structure for the model input
+    batch_data = []
+    for idx, s in enumerate(stories):
+        batch_data.append({
+            "id": idx,
+            "title": s.title,
+            "details": s.summary if s.summary.strip() else "Context requested based on headline."
+        })
+
     try:
         prompt = (
-            f"You are a sharp, elite executive brief assistant. Provide a highly concise 1-2 sentence takeaway "
-            f"explaining the core relevance of this headline to the user, Michael.\n\n"
-            f"Michael's Profile to contextually filter news:\n"
+            f"You are an elite, razor-sharp executive briefing assistant. Below is an array of raw news articles selected for Michael.\n\n"
+            f"Michael's Profile to contextually filter and summarize news:\n"
             f"- A medical device professional working in neurological fields (Parkinson's disease, brain tech, neuro tech, FDA approvals).\n"
             f"- An entrepreneur and application creator building a company leveraging modern AI models and marketing tech tools.\n"
             f"- A highly dedicated fan of the Boston Celtics, Boston Bruins, Boston Red Sox, New England Patriots, Georgia Tech Yellow Jackets (Football/Basketball), and D1 Lacrosse (specifically Virginia/UVA Lacrosse), alongside major general NBA/NFL/CFB storylines.\n\n"
-            f"CRITICAL INSTRUCTIONS:\n"
-            f"1. You MUST start your response explicitly with the words 'The Takeaway: '.\n"
-            f"2. Tie AI/Tech/Finance/Neuro news directly into how it scales an app company, impacts macro markets, or affects medical device innovation where applicable. If it is a sports story, tie it directly to his allegiance or its competitive impact on his teams.\n"
-            f"3. Do not repeat the headline verbatim.\n\n"
-            f"Headline: {title}\n"
-            f"Details: {text_to_analyze}"
+            f"CRITICAL INSTRUCTIONS FOR OUTPUT:\n"
+            f"For each item, generate a highly concise 1-2 sentence breakdown. You MUST strictly return a JSON object containing a dictionary mapping the integer 'id' string to your output description string.\n"
+            f"Each description must explicitly start with the exact words: 'The Takeaway: '.\n"
+            f"Tie tech/finance/biotech news to his startup scale or engineering innovation target, and sports news straight to competitive impacts or his allegiances.\n\n"
+            f"Return ONLY valid JSON in the structure:\n"
+            f'{{"0": "The Takeaway: ...", "1": "The Takeaway: ..."}}\n\n'
+            f"Articles data:\n{json.dumps(batch_data)}"
         )
-        response = ai_client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
+        
+        response = ai_client.models.generate_content(
+            model='gemini-2.0-flash', 
+            contents=prompt,
+            config={"response_mime_type": "application/json"}
+        )
+        
         if response.text:
-            return response.text.strip()
-        return summary if summary else "No summary details available."
+            parsed_responses = json.loads(response.text.strip())
+            for idx, s in enumerate(stories):
+                str_idx = str(idx)
+                if str_idx in parsed_responses:
+                    s.summary = parsed_responses[str_idx]
     except Exception as e:
-        print(f"--- GEMINI API HANDSHAKE ERROR --- Detail: {e}")
-        return summary if summary.strip() else "No description available."
+        print(f"--- GEMINI BATCH API HANDSHAKE ERROR --- Detail: {e}")
+        # Fall back gracefully to original raw summaries if the call/parse fails
+    
+    return stories
 
 def fetch_stories() -> list[Story]:
     stories = []
@@ -227,8 +247,6 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
     # 1. Lock down the mandatory sports slot
     for s in ranked:
         if s.source in SPORTS_SOURCES and s.link not in seen:
-            s.summary = enrich_story_with_ai(s.title, s.summary)
-            time.sleep(2.0)  # Rate limit safety delay
             picked_sports.append(s)
             seen.add(s.link)
             break 
@@ -244,8 +262,6 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
         if per_topic.get(s.topic, 0) >= MAX_PER_TOPIC: continue
         if per_source.get(s.source, 0) >= MAX_PER_SOURCE: continue 
         
-        s.summary = enrich_story_with_ai(s.title, s.summary)
-        time.sleep(2.0)  # Rate limit safety delay
         picked_general.append(s)
         per_topic[s.topic] = per_topic.get(s.topic, 0) + 1
         per_source[s.source] = per_source.get(s.source, 0) + 1  
@@ -253,8 +269,6 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
 
     if not picked_general and not picked_sports:
         for s in ranked[:TOP_N]:
-            s.summary = enrich_story_with_ai(s.title, s.summary)
-            time.sleep(2.0)  # Rate limit safety delay
             picked_general.append(s)
 
     return picked_general + picked_sports
@@ -314,4 +328,8 @@ if __name__ == "__main__":
     all_stories = fetch_stories()
     for s in all_stories: score_story(s)
     top_selection = pick_top(all_stories)
+    
+    # Run the new single-call batch enrichment
+    top_selection = enrich_stories_batch_with_ai(top_selection)
+    
     render_and_send(top_selection)
