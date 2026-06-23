@@ -147,7 +147,10 @@ def _clean(text: str) -> str:
 
 def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
     """Processes all selected stories in a single API request using the new types config syntax."""
-    if not ai_client or not stories:
+    if not ai_client:
+        print("AI ENRICHMENT SKIPPED: ai_client is None — GEMINI_API_KEY secret is missing, empty, or failed to initialize the client.")
+        return stories
+    if not stories:
         return stories
 
     batch_data = []
@@ -187,10 +190,20 @@ def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
         
         if response.text:
             parsed_responses = json.loads(response.text.strip())
+            applied = 0
             for idx, s in enumerate(stories):
                 str_idx = str(idx)
                 if str_idx in parsed_responses:
                     s.summary = parsed_responses[str_idx]
+                    applied += 1
+            print(f"AI ENRICHMENT OK: applied {applied}/{len(stories)} takeaways.")
+        else:
+            finish_reason = None
+            try:
+                finish_reason = response.candidates[0].finish_reason
+            except Exception:
+                pass
+            print(f"AI ENRICHMENT WARNING: response.text was empty (finish_reason={finish_reason}). Raw response: {response}")
     except Exception as e:
         print(f"--- GEMINI BATCH API HANDSHAKE ERROR --- Detail: {e}")
     
