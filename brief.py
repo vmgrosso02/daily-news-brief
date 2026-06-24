@@ -174,7 +174,7 @@ def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
         f"CRITICAL INSTRUCTIONS FOR OUTPUT:\n"
         f"For each item, generate a highly concise 1-2 sentence breakdown. You MUST strictly return a JSON object containing a dictionary mapping the integer 'id' string to your output description string.\n"
         f"Each description must explicitly start with the exact words: 'The Takeaway: '.\n"
-        f"Tie tech/finance/biotech news to his startup scale or engineering innovation target, and sports news straight to competitive impacts or his allegiances.\n\n"
+        f"Only draw a connection to Michael's neuro/medical-device work, his AI startup, or his teams when it is genuinely specific and earned by the actual content of the story — never force one. If a story has no real personal angle (e.g. it's not actually about his field, just adjacent-sounding), skip the personalization entirely and give a sharp, standalone 1-2 sentence summary of what happened and why it matters on its own terms. Vary sentence structure across items — do not default to the same 'this is a cautionary tale for...' or 'this is relevant to his work in...' framing more than once in the batch.\n\n"
         f"Return ONLY valid JSON in the structure:\n"
         f'{{"0": "The Takeaway: ...", "1": "The Takeaway: ..."}}\n\n'
         f"Articles data:\n{json.dumps(batch_data)}"
