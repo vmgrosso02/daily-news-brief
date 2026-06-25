@@ -174,7 +174,10 @@ def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
         f"CRITICAL INSTRUCTIONS FOR OUTPUT:\n"
         f"For each item, generate a highly concise 1-2 sentence breakdown. You MUST strictly return a JSON object containing a dictionary mapping the integer 'id' string to your output description string.\n"
         f"Each description must explicitly start with the exact words: 'The Takeaway: '.\n"
-        f"Only draw a connection to Michael's neuro/medical-device work, his AI startup, or his teams when it is genuinely specific and earned by the actual content of the story — never force one. If a story has no real personal angle (e.g. it's not actually about his field, just adjacent-sounding), skip the personalization entirely and give a sharp, standalone 1-2 sentence summary of what happened and why it matters on its own terms. Vary sentence structure across items — do not default to the same 'this is a cautionary tale for...' or 'this is relevant to his work in...' framing more than once in the batch.\n\n"
+        f"Only draw a connection to Michael's neuro/medical-device work or his AI startup when it is genuinely specific and earned by the actual content of the story — never force one. If a story has no real personal angle, skip the personalization entirely and give a sharp, standalone 1-2 sentence summary of what happened and why it matters on its own terms.\n"
+        f"For sports stories specifically: do not state that the story 'connects to his interest,' 'his affinity,' or similar — the sports slot is already curated to his own teams, so that's a given and doesn't need to be spelled out. Just summarize the sports news itself plainly.\n"
+        f"Never refer to Michael by name or in the third person inside the takeaway text itself — he is the one reading it, so write as if speaking to him, not narrating about him from outside.\n"
+        f"Vary sentence structure across items — do not default to the same framing (e.g. 'this is a cautionary tale for...', 'this connects with...', 'relevant to his work in...') more than once in the batch.\n\n"
         f"Return ONLY valid JSON in the structure:\n"
         f'{{"0": "The Takeaway: ...", "1": "The Takeaway: ..."}}\n\n'
         f"Articles data:\n{json.dumps(batch_data)}"
