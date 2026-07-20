@@ -38,7 +38,7 @@ TOP_N = 5
 MAX_PER_TOPIC = 2
 MAX_PER_SOURCE = 1      # Enforce source diversity
 MAX_AGE_HOURS = 24      # Regular news window
-SPORTS_AGE_HOURS = 120   # Expanded to 5 days so you handle slow news cycles/weekends
+SPORTS_AGE_HOURS = 48   # Reduced from 120h to prevent stale/duplicate sports stories across slow cycles
 
 SPORTS_SOURCES = [
     "NCAA Lacrosse", "Inside Lacrosse", "ESPN NBA", "ESPN NFL", 
@@ -46,26 +46,30 @@ SPORTS_SOURCES = [
 ]
 
 TOPIC_LABELS = {
+    "general": "World & National",
     "finance_markets": "Markets",
     "ai_tech": "AI & Tech",
     "biotech_neuro": "Biotech / Neuro",
     "sports": "Sports",
-    "general": "Briefing",
 }
 
 FEEDS = [
+    # --- General & World News ---
+    ("BBC News World",          "https://feeds.bbci.co.uk/news/world/rss.xml",                      0.95),
+    ("NPR Top Stories",         "https://feeds.npr.org/1001/rss.xml",                               0.95),
+
     # --- Markets & Finance ---
-    ("Reuters Business",        "https://feeds.reuters.com/reuters/businessNews",                    0.95),
+    ("Reuters Business",        "https://feeds.reuters.com/reuters/businessNews",                   0.95),
     ("CNBC Business",           "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10001142", 0.95),
     ("Yahoo Finance",           "https://finance.yahoo.com/news/rssindex",                          0.85),
     ("MarketWatch Top",         "http://feeds.marketwatch.com/marketwatch/topstories/",             0.90),
-    ("Benzinga Core",           "https://feeds.benzinga.com/benzinga",                              0.85),
-    ("Federal Reserve News",    "https://www.federalreserve.gov/feeds/press_all.xml",               1.00),
+    ("Benzinga Core",           "https://feeds.benzinga.com/benzinga",                               0.85),
+    ("Federal Reserve News",    "https://www.federalreserve.gov/feeds/press_all.xml",                1.00),
     
     # --- AI & Tech ---
-    ("Ars Technica",            "https://feeds.feedburner.com/arstechnica/index",                    0.95),
-    ("The Verge",               "https://www.theverge.com/rss/index.xml",                           0.90),
-    ("TechCrunch",              "https://techcrunch.com/feed/",                                     0.90),
+    ("Ars Technica",            "https://feeds.feedburner.com/arstechnica/index",                     0.95),
+    ("The Verge",               "https://www.theverge.com/rss/index.xml",                            0.90),
+    ("TechCrunch",              "https://techcrunch.com/feed/",                                      0.90),
     ("Hacker News Top",         "https://news.ycombinator.com/rss",                                 0.95),
     ("Tech Xplore",             "https://techxplore.com/feeds/",                                    0.90),
     ("Wired Top Stories",       "https://www.wired.com/feed/rss",                                   0.90),
@@ -73,7 +77,7 @@ FEEDS = [
     
     # --- Biotech & Neuroscience ---
     ("BioSpace Biotech",        "https://www.biospace.com/rss/",                                    0.95),
-    ("ScienceDaily Mind/Brain", "https://www.sciencedaily.com/rss/mind_brain.xml",                  0.95),
+    ("ScienceDaily Mind/Brain", "https://www.sciencedaily.com/rss/mind_brain.xml",                   0.95),
     ("ScienceDaily Biotech",    "https://www.sciencedaily.com/rss/matter_energy/biotechnology.xml", 0.95),
     ("Medical Xpress",          "https://medicalxpress.com/rss-feed/",                              0.90),
     ("Phys.org Biology",        "https://phys.org/feeds/biology-news/",                             0.90),
@@ -83,15 +87,24 @@ FEEDS = [
     # --- Sports ---
     ("NCAA Lacrosse",           "https://www.ncaa.com/news/lacrosse-men/d1/rss.xml",                 1.00),
     ("Inside Lacrosse",         "https://www.insidelacrosse.com/rss",                               1.00),
-    ("ESPN NBA",                "https://www.espn.com/espn/rss/nba/news",                           0.90),
-    ("ESPN NFL",                "https://www.espn.com/espn/rss/nfl/news",                           0.90),
+    ("ESPN NBA",                "https://www.espn.com/espn/rss/nba/news",                            0.90),
+    ("ESPN NFL",                "https://www.espn.com/espn/rss/nfl/news",                            0.90),
     ("Ramblin Wreck (GT)",      "https://ramblinwreck.com/feed/",                                   0.95),
     ("Bleacher Report",         "https://bleacherreport.com/articles/feed",                         0.85),
 ]
 
 INTERESTS = {
+    "general": {
+        "weight": 1.1,
+        "keywords": [
+            "court", "president", "election", "biden", "trump", "white house", "congress", "senate", 
+            "supreme court", "global", "war", "treaty", "protest", "strike", "settlement", "climate", 
+            "un", "united nations", "border", "investigation", "reuters", "associated press", "world",
+            "national", "breaking", "policy"
+        ]
+    },
     "finance_markets": {
-        "weight": 1.0, 
+        "weight": 1.1, 
         "keywords": [
             "fed", "inflation", "yield", "s&p 500", "nasdaq", "nvda", "stocks", "rate cut", 
             "recession", "jerome powell", "treasury", "bear market", "bull market", "macroeconomics", 
@@ -99,7 +112,7 @@ INTERESTS = {
         ]
     },
     "ai_tech": {
-        "weight": 1.3, 
+        "weight": 1.2, 
         "keywords": [
             "ai agents", "robotics", "openai", "claude", "gpu", "llm", "chatgpt", "generative ai", 
             "nvidia", "anthropic", "copilot", "quantum computing", "semiconductor", "transformers", 
@@ -107,7 +120,7 @@ INTERESTS = {
         ]
     },
     "biotech_neuro": {
-        "weight": 1.4, 
+        "weight": 0.9,  # Balanced down from 1.4 to keep regular news competitive
         "keywords": [
             "fda", "crispr", "neuroscience", "neuralink", "clinical trial", "gene therapy", 
             "alzheimer", "brain-computer", "biopharma", "parkinson", "medical device", "neurology",
