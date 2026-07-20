@@ -38,7 +38,7 @@ TOP_N = 5
 MAX_PER_TOPIC = 2
 MAX_PER_SOURCE = 1      # Enforce source diversity
 MAX_AGE_HOURS = 24      # Regular news window
-SPORTS_AGE_HOURS = 48   # Reduced from 120h to prevent stale/duplicate sports stories across slow cycles
+SPORTS_AGE_HOURS = 120  # Keep pool open to 5 days so fallback data exists during slow cycles
 
 SPORTS_SOURCES = [
     "NCAA Lacrosse", "Inside Lacrosse", "ESPN NBA", "ESPN NFL", 
@@ -99,7 +99,7 @@ INTERESTS = {
         "keywords": [
             "court", "president", "election", "biden", "trump", "white house", "congress", "senate", 
             "supreme court", "global", "war", "treaty", "protest", "strike", "settlement", "climate", 
-            "un", "united nations", "border", "investigation", "reuters", "associated press", "world",
+            "un", "united nations", "border", "investigation", "reuters", "associated_press", "world",
             "national", "breaking", "policy"
         ]
     },
@@ -120,7 +120,7 @@ INTERESTS = {
         ]
     },
     "biotech_neuro": {
-        "weight": 0.9,  # Balanced down from 1.4 to keep regular news competitive
+        "weight": 0.9,  
         "keywords": [
             "fda", "crispr", "neuroscience", "neuralink", "clinical trial", "gene therapy", 
             "alzheimer", "brain-computer", "biopharma", "parkinson", "medical device", "neurology",
@@ -159,13 +159,11 @@ def _clean(text: str) -> str:
     return html.unescape(text).strip()
 
 MAX_AI_RETRIES = 3
-AI_RETRY_BASE_DELAY_SECONDS = 5  # 5s, then 10s between attempts
+AI_RETRY_BASE_DELAY_SECONDS = 5
 
 def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
-    """Processes all selected stories in a single API request using the new types config syntax.
-    Retries on transient errors (503 high-demand, 429 rate limit) since this runs unattended."""
     if not ai_client:
-        print("AI ENRICHMENT SKIPPED: ai_client is None — GEMINI_API_KEY secret is missing, empty, or failed to initialize the client.")
+        print("AI ENRICHMENT SKIPPED: ai_client is None.")
         return stories
     if not stories:
         return stories
@@ -190,16 +188,13 @@ def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
         f"Only draw a connection to Michael's neuro/medical-device work or his AI startup when it is genuinely specific and earned by the actual content of the story — never force one. If a story has no real personal angle, skip the personalization entirely and give a sharp, standalone 1-2 sentence summary of what happened and why it matters on its own terms.\n"
         f"For sports stories specifically: do not state that the story 'connects to his interest,' 'his affinity,' or similar — the sports slot is already curated to his own teams, so that's a given and doesn't need to be spelled out. Just summarize the sports news itself plainly.\n"
         f"Never refer to Michael by name or in the third person inside the takeaway text itself — he is the one reading it, so write as if speaking to him, not narrating about him from outside.\n"
-        f"Vary sentence structure across items — do not default to the same framing (e.g. 'this is a cautionary tale for...', 'this connects with...', 'relevant to his work in...') more than once in the batch.\n\n"
+        f"Vary sentence structure across items — do not default to the same framing more than once in the batch.\n\n"
         f"Return ONLY valid JSON in the structure:\n"
         f'{{"0": "The Takeaway: ...", "1": "The Takeaway: ..."}}\n\n'
         f"Articles data:\n{json.dumps(batch_data)}"
     )
 
-    # Fixed: Instantiating structured configuration via the explicit GenAI types class
-    config = types.GenerateContentConfig(
-        response_mime_type="application/json"
-    )
+    config = types.GenerateContentConfig(response_mime_type="application/json")
 
     for attempt in range(1, MAX_AI_RETRIES + 1):
         try:
@@ -217,33 +212,21 @@ def enrich_stories_batch_with_ai(stories: list[Story]) -> list[Story]:
                     if str_idx in parsed_responses:
                         s.summary = parsed_responses[str_idx]
                         applied += 1
-                print(f"AI ENRICHMENT OK: applied {applied}/{len(stories)} takeaways (attempt {attempt}/{MAX_AI_RETRIES}).")
+                print(f"AI ENRICHMENT OK: applied {applied}/{len(stories)} takeaways.")
                 return stories
             else:
-                finish_reason = None
-                try:
-                    finish_reason = response.candidates[0].finish_reason
-                except Exception:
-                    pass
-                print(f"AI ENRICHMENT WARNING: response.text was empty (finish_reason={finish_reason}). Raw response: {response}")
-                return stories  # not transient — retrying won't help an empty response
-
+                return stories
         except Exception as e:
             err_str = str(e)
             is_transient = any(marker in err_str for marker in ["503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "high demand"])
             if is_transient and attempt < MAX_AI_RETRIES:
                 delay = AI_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
-                print(f"--- GEMINI TRANSIENT ERROR (attempt {attempt}/{MAX_AI_RETRIES}) --- Detail: {e}. Retrying in {delay}s...")
                 time.sleep(delay)
                 continue
-            print(f"--- GEMINI BATCH API HANDSHAKE ERROR (attempt {attempt}/{MAX_AI_RETRIES}, final) --- Detail: {e}")
             return stories
-
     return stories
 
 def ensure_summaries(stories: list[Story]) -> list[Story]:
-    """Safety net: never let a story render with a blank body, regardless of why
-    (empty RSS entry, AI enrichment failure, API outage, etc.)."""
     for s in stories:
         if not s.summary or not s.summary.strip():
             s.summary = "No summary available for this one. Tap through to read the full story."
@@ -304,14 +287,24 @@ def pick_top(stories: Iterable[Story]) -> list[Story]:
     picked_sports = []
     seen = set()
 
-    # 1. Lock down the mandatory sports slot
+    # Pass 1: Look for a fresh sports story (less than 48 hours old)
     for s in ranked:
         if s.source in SPORTS_SOURCES and s.link not in seen:
-            picked_sports.append(s)
-            seen.add(s.link)
-            break 
+            age_h = (dt.datetime.utcnow() - s.published).total_seconds() / 3600.0
+            if age_h <= 48:
+                picked_sports.append(s)
+                seen.add(s.link)
+                break 
     
-    # 2. Allocate general categories with diversity tracking
+    # Pass 2 Fallback: If no fresh sports stories exist, take the best older one (up to 120h)
+    if not picked_sports:
+        for s in ranked:
+            if s.source in SPORTS_SOURCES and s.link not in seen:
+                picked_sports.append(s)
+                seen.add(s.link)
+                break
+
+    # Allocate general categories with diversity tracking
     per_topic = {}
     per_source = {}  
 
@@ -388,7 +381,6 @@ if __name__ == "__main__":
     for s in all_stories: score_story(s)
     top_selection = pick_top(all_stories)
     
-    # Run the updated single-call batch enrichment
     top_selection = enrich_stories_batch_with_ai(top_selection)
     top_selection = ensure_summaries(top_selection)
     
