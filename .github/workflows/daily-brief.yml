@@ -2,10 +2,10 @@ name: Daily News Brief
 
 on:
   schedule:
-    # Runs at 5:55 AM EDT (9:55 UTC) — Mar through Oct (EDT, UTC-4)
-    - cron: '55 9 * 3,4,5,6,7,8,9,10 *'
-    # Runs at 6:55 AM EST (10:55 UTC) — Nov, Dec, Jan, Feb (EST, UTC-5)
-    - cron: '55 10 * 1,2,11,12 *'
+    # Runs at 1:00 AM EDT (5:00 UTC) — Mar through Oct (EDT, UTC-4)
+    - cron: '0 5 * 3,4,5,6,7,8,9,10 *'
+    # Runs at 1:00 AM EST (6:00 UTC) — Nov, Dec, Jan, Feb (EST, UTC-5)
+    - cron: '0 6 * 1,2,11,12 *'
   workflow_dispatch:
 
 jobs:
